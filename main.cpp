@@ -4,6 +4,7 @@
 
 #include <Windows.h>
 #include <D3D11.h>
+#include <d3dx11.h>
 #include <xnamath.h>
 #include <exception>
 #include <stdio.h>
@@ -126,12 +127,69 @@ struct Vertex
 };
 void RenderPipeline()
 {
+	HRESULT hr;
+	ID3D11VertexShader* VS;
+	ID3D11PixelShader* PS;
+	ID3D10Blob* VS_Buffer;
+	ID3D10Blob* PS_Buffer;
+
+//创建着色器（顶点着色器和像素着色器）
+	hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "VS", "vs_5_0", 0, 0, 0, &VS_Buffer, 0, 0);
+	hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "PS", "ps_5_0", 0, 0, 0, &PS_Buffer, 0, 0);
+	
+	d3dDevice->CreateVertexShader(VS_Buffer->GetBufferPointer(),VS_Buffer->GetBufferSize(),NULL,&VS);
+	d3dDevice->CreatePixelShader(PS_Buffer->GetBufferPointer(),PS_Buffer->GetBufferSize(),NULL,&PS);
+	
+	d3dDeviceContext->VSSetShader(VS,0,0);
+	d3dDeviceContext->PSSetShader(PS,0,0);
+
 //输入汇编器阶段(IA)
+
+	ID3D11Buffer* triangleVertBuffer;
+	ID3D11InputLayout *inputLayout;
+
 	D3D11_INPUT_ELEMENT_DESC verDesc[2] = {
 		{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0},
 		{"COLOR",0,DXGI_FORMAT_R32G32B32A32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0}
 	};
-	//d3dDevice->CreateInputLayout(
+
+	Vertex vertex[] = 
+	{
+		{XMFLOAT3(0.0,0.0,0.5),XMFLOAT4(0.0,0.5,0.5,0.5)},
+		{XMFLOAT3(0.0,0.5,0.5),XMFLOAT4(0.0,0.5,0.5,0.5)},
+		{XMFLOAT3(0.5,0.0,0.5),XMFLOAT4(0.0,0.5,0.5,0.5)}
+	};
+
+	D3D11_BUFFER_DESC vertexBufferDesc;
+	D3D11_SUBRESOURCE_DATA vertexData;
+
+	vertexBufferDesc.ByteWidth = sizeof(Vertex) * 3;	//看看能不能换成sizeof(vertex)或是 sizeof(Vertex) * ARRAYSIZE(vertex)
+	vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	vertexBufferDesc.CPUAccessFlags = 0;
+	vertexBufferDesc.MiscFlags = 0;
+	vertexBufferDesc.StructureByteStride = 0;
+
+	vertexData.pSysMem = vertex;
+	vertexData.SysMemPitch = 0;
+	vertexData.SysMemSlicePitch = 0;
+
+	d3dDevice->CreateBuffer(&vertexBufferDesc,&vertexData,&triangleVertBuffer);
+
+	UINT stride = sizeof(vertex);
+	UINT offset = 0;
+	d3dDeviceContext->IASetVertexBuffers(0,1,triangleVertBuffer,&stride,&offset);
+
+	d3dDevice->CreateInputLayout(verDesc,ARRAYSIZE(verDesc),VS_Buffer->GetBufferPointer(),&inputLayout);
+
+	d3dDeviceContext->IASetInputLayout(inputLayout);
+
+	d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	//d3dDeviceContext->RSSetViewports(
+
+//顶点着色器阶段(VS)
+
 }
 
 int CALLBACK WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine,int nCmdShow)
