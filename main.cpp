@@ -5,12 +5,31 @@
 #include <Windows.h>
 #include <D3D11.h>
 #include <d3dx11.h>
+#include <DxErr.h>
 #include <xnamath.h>
 #include <exception>
 #include <stdio.h>
 
-#define WIDTH 100
-#define HEIGHT 100 
+#define WIDTH 300
+#define HEIGHT 300 
+
+#if defined(DEBUG) | defined(_DEBUG)
+    #ifndef HR
+    #define HR(x)                                                 \
+    {                                                             \
+        HRESULT DefHr = (x);                                      \
+        if(FAILED(DefHr))                                         \
+        {                                                         \
+            DXTrace(__FILE__, (DWORD)__LINE__, DefHr, L#x, true); \
+        }                                                         \
+    }
+    #endif
+#else
+    #ifndef HR
+    #define HR(x) (x)
+    #endif
+#endifdif
+#endif
 
 const TCHAR ClassName[]=TEXT("dx_world");
 
@@ -19,7 +38,10 @@ IDXGISwapChain * d3dSwapChain;
 ID3D11Device * d3dDevice;
 ID3D11DeviceContext  * d3dDeviceContext;
 ID3D11RenderTargetView * renderTargetView;
-FLOAT colorRGBA[4] = {0.0,1.0,0.0,1.0};
+
+//FLOAT colorRGBA[4] = {0.0,1.0,0.0,1.0};	//纯绿
+FLOAT colorRGBA[4] = {0.0,0.0,0.0,1.0};	//纯黑
+
 
 void UpdateScene();
 void DrawScene();
@@ -120,12 +142,16 @@ void DirectxInit()
 
 }
 
+//struct Vertex
+//{
+//	XMFLOAT3 position;
+//	XMFLOAT4 color;
+//};
 struct Vertex
 {
 	XMFLOAT3 position;
-	XMFLOAT4 color;
 };
-void RenderPipeline()
+bool RenderPipeline()
 {
 	HRESULT hr;
 	ID3D11VertexShader* VS;
@@ -134,11 +160,15 @@ void RenderPipeline()
 	ID3D10Blob* PS_Buffer;
 
 //创建着色器（顶点着色器和像素着色器）
-	hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "VS", "vs_5_0", 0, 0, 0, &VS_Buffer, 0, 0);
-	hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "PS", "ps_5_0", 0, 0, 0, &PS_Buffer, 0, 0);
+	hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "VS", "vs_4_0", 0, 0, 0, &VS_Buffer, 0, 0);
+	HR(hr);
+	hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "PS", "ps_4_0", 0, 0, 0, &PS_Buffer, 0, 0);
+	HR(hr);
 	
-	d3dDevice->CreateVertexShader(VS_Buffer->GetBufferPointer(),VS_Buffer->GetBufferSize(),NULL,&VS);
-	d3dDevice->CreatePixelShader(PS_Buffer->GetBufferPointer(),PS_Buffer->GetBufferSize(),NULL,&PS);
+	hr = d3dDevice->CreateVertexShader(VS_Buffer->GetBufferPointer(),VS_Buffer->GetBufferSize(),NULL,&VS);
+	HR(hr);
+	hr = d3dDevice->CreatePixelShader(PS_Buffer->GetBufferPointer(),PS_Buffer->GetBufferSize(),NULL,&PS);
+	HR(hr);
 	
 	d3dDeviceContext->VSSetShader(VS,0,0);
 	d3dDeviceContext->PSSetShader(PS,0,0);
@@ -148,16 +178,27 @@ void RenderPipeline()
 	ID3D11Buffer* triangleVertBuffer;
 	ID3D11InputLayout *inputLayout;
 
-	D3D11_INPUT_ELEMENT_DESC verDesc[2] = {
-		{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0},
-		{"COLOR",0,DXGI_FORMAT_R32G32B32A32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0}
+	//D3D11_INPUT_ELEMENT_DESC verDesc[2] = {
+	//	{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0},
+	//	{"COLOR",0,DXGI_FORMAT_R32G32B32A32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0}
+	//};
+
+	//Vertex vertex[] = 
+	//{
+	//	{XMFLOAT3(0.0,0.0,0.5),XMFLOAT4(0.0,0.5,0.5,0.5)},
+	//	{XMFLOAT3(0.0,0.5,0.5),XMFLOAT4(0.0,0.5,0.5,0.5)},
+	//	{XMFLOAT3(0.5,0.0,0.5),XMFLOAT4(0.0,0.5,0.5,0.5)}
+	//};
+
+	D3D11_INPUT_ELEMENT_DESC verDesc[1] = {
+		{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0}
 	};
 
 	Vertex vertex[] = 
 	{
-		{XMFLOAT3(0.0,0.0,0.5),XMFLOAT4(0.0,0.5,0.5,0.5)},
-		{XMFLOAT3(0.0,0.5,0.5),XMFLOAT4(0.0,0.5,0.5,0.5)},
-		{XMFLOAT3(0.5,0.0,0.5),XMFLOAT4(0.0,0.5,0.5,0.5)}
+		{XMFLOAT3(0.0,0.0,0.5)},
+		{XMFLOAT3(0.0,0.5,0.5)},
+		{XMFLOAT3(0.5,0.0,0.5)}
 	};
 
 	D3D11_BUFFER_DESC vertexBufferDesc;
@@ -174,22 +215,34 @@ void RenderPipeline()
 	vertexData.SysMemPitch = 0;
 	vertexData.SysMemSlicePitch = 0;
 
-	d3dDevice->CreateBuffer(&vertexBufferDesc,&vertexData,&triangleVertBuffer);
+	hr = d3dDevice->CreateBuffer(&vertexBufferDesc,&vertexData,&triangleVertBuffer);
+	HR(hr);
 
-	UINT stride = sizeof(vertex);
+	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
-	d3dDeviceContext->IASetVertexBuffers(0,1,triangleVertBuffer,&stride,&offset);
+	d3dDeviceContext->IASetVertexBuffers(0,1,&triangleVertBuffer,&stride,&offset);
 
-	d3dDevice->CreateInputLayout(verDesc,ARRAYSIZE(verDesc),VS_Buffer->GetBufferPointer(),&inputLayout);
+	hr = d3dDevice->CreateInputLayout(verDesc,ARRAYSIZE(verDesc),VS_Buffer->GetBufferPointer(),VS_Buffer->GetBufferSize(),&inputLayout);
+	HR(hr);
 
 	d3dDeviceContext->IASetInputLayout(inputLayout);
 
 	d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-	//d3dDeviceContext->RSSetViewports(
-
+	
 //顶点着色器阶段(VS)
 
+//光栅化阶段(RS)
+	D3D11_VIEWPORT viewPort;
+	viewPort.TopLeftX = 0;
+	viewPort.TopLeftY = 0;
+	viewPort.Width = WIDTH;
+	viewPort.Height = HEIGHT;
+	viewPort.MaxDepth = 0;
+	viewPort.MinDepth = 0;
+
+	d3dDeviceContext->RSSetViewports(1,&viewPort);
+
+	return true;
 }
 
 int CALLBACK WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine,int nCmdShow)
@@ -197,6 +250,8 @@ int CALLBACK WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine
 	WindowInit(hInstance);
 
 	DirectxInit();
+	
+	RenderPipeline();
 
 	messageLoop();
 	return 0;
@@ -204,23 +259,25 @@ int CALLBACK WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine
 
 void UpdateScene()
 {
-	static bool colorDirection = true;
-	if(colorDirection)
-	{
-		colorRGBA[0] -= 1.0 / 38000;
-		colorRGBA[2] = colorRGBA[0];
-		if(colorRGBA[0] < 0.0)colorDirection = false;
-	}
-	else
-	{
-		colorRGBA[0] += 1.0 / 38000;
-		colorRGBA[2] = colorRGBA[0];
-		if(colorRGBA[0] > 1.0)colorDirection = true;
-	}
+//白绿渐变
+	//static bool colorDirection = true;
+	//if(colorDirection)
+	//{
+	//	colorRGBA[0] -= 1.0 / 38000;
+	//	colorRGBA[2] = colorRGBA[0];
+	//	if(colorRGBA[0] < 0.0)colorDirection = false;
+	//}
+	//else
+	//{
+	//	colorRGBA[0] += 1.0 / 38000;
+	//	colorRGBA[2] = colorRGBA[0];
+	//	if(colorRGBA[0] > 1.0)colorDirection = true;
+	//}
 
 }
 void DrawScene()
 {
 	d3dDeviceContext->ClearRenderTargetView(renderTargetView,colorRGBA);
+	d3dDeviceContext->Draw(3,0);
 	d3dSwapChain->Present(0,0);
 }
