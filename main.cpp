@@ -151,6 +151,15 @@ struct Vertex
 {
 	XMFLOAT3 position;
 };
+
+Vertex vertex[] = 
+{
+	{XMFLOAT3(0.0,0.0,0.5)},
+	{XMFLOAT3(0.0,0.5,0.5)},
+	{XMFLOAT3(0.5,0.0,0.5)},
+	{XMFLOAT3(0.5,0.5,0.5)},
+	{XMFLOAT3(0.5,0.5,0.5)},
+};
 bool RenderPipeline()
 {
 	HRESULT hr;
@@ -194,17 +203,10 @@ bool RenderPipeline()
 		{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0}
 	};
 
-	Vertex vertex[] = 
-	{
-		{XMFLOAT3(0.0,0.0,0.5)},
-		{XMFLOAT3(0.0,0.5,0.5)},
-		{XMFLOAT3(0.5,0.0,0.5)}
-	};
-
 	D3D11_BUFFER_DESC vertexBufferDesc;
 	D3D11_SUBRESOURCE_DATA vertexData;
 
-	vertexBufferDesc.ByteWidth = sizeof(Vertex) * 3;	//看看能不能换成sizeof(vertex)或是 sizeof(Vertex) * ARRAYSIZE(vertex)
+	vertexBufferDesc.ByteWidth = sizeof(Vertex) * ARRAYSIZE(vertex);	//看看能不能换成sizeof(vertex)或是 sizeof(Vertex) * ARRAYSIZE(vertex)
 	vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
 	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	vertexBufferDesc.CPUAccessFlags = 0;
@@ -226,8 +228,9 @@ bool RenderPipeline()
 	HR(hr);
 
 	d3dDeviceContext->IASetInputLayout(inputLayout);
-
-	d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	
+	//d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 	
 //顶点着色器阶段(VS)
 
@@ -278,6 +281,6 @@ void UpdateScene()
 void DrawScene()
 {
 	d3dDeviceContext->ClearRenderTargetView(renderTargetView,colorRGBA);
-	d3dDeviceContext->Draw(3,0);
+	d3dDeviceContext->Draw(ARRAYSIZE(vertex),0);
 	d3dSwapChain->Present(0,0);
 }
