@@ -10,8 +10,8 @@
 #include <exception>
 #include <stdio.h>
 
-#define WIDTH 300
-#define HEIGHT 300 
+#define WIDTH 100
+#define HEIGHT 100 
 
 #if defined(DEBUG) | defined(_DEBUG)
     #ifndef HR
@@ -145,21 +145,30 @@ void DirectxInit()
 //struct Vertex
 //{
 //	XMFLOAT3 position;
-//	XMFLOAT4 color;
 //};
 struct Vertex
 {
 	XMFLOAT3 position;
+	XMFLOAT4 color;
 };
 
+//Vertex vertex[] = 
+//{
+//	{XMFLOAT3(0.0,0.0,0.5)},
+//	{XMFLOAT3(0.0,0.5,0.5)},
+//	{XMFLOAT3(0.5,0.0,0.5)},
+//	{XMFLOAT3(0.5,0.5,0.5)},
+//	{XMFLOAT3(0.5,0.5,0.5)},
+//};
 Vertex vertex[] = 
 {
-	{XMFLOAT3(0.0,0.0,0.5)},
-	{XMFLOAT3(0.0,0.5,0.5)},
-	{XMFLOAT3(0.5,0.0,0.5)},
-	{XMFLOAT3(0.5,0.5,0.5)},
-	{XMFLOAT3(0.5,0.5,0.5)},
+	{XMFLOAT3(0.0,0.0,0.5),XMFLOAT4(0.0,1.0,1.0,1.0)},
+	{XMFLOAT3(0.0,0.5,0.5),XMFLOAT4(1.0,0.0,1.0,1.0)},
+	{XMFLOAT3(0.5,0.0,0.5),XMFLOAT4(1.0,1.0,0.0,1.0)},
+	{XMFLOAT3(0.5,0.5,0.5),XMFLOAT4(0.0,1.0,1.0,1.0)},
+	{XMFLOAT3(1.0,0.5,0.5),XMFLOAT4(1.0,0.0,1.0,1.0)},
 };
+
 bool RenderPipeline()
 {
 	HRESULT hr;
@@ -187,26 +196,19 @@ bool RenderPipeline()
 	ID3D11Buffer* triangleVertBuffer;
 	ID3D11InputLayout *inputLayout;
 
-	//D3D11_INPUT_ELEMENT_DESC verDesc[2] = {
-	//	{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0},
-	//	{"COLOR",0,DXGI_FORMAT_R32G32B32A32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0}
-	//};
-
-	//Vertex vertex[] = 
-	//{
-	//	{XMFLOAT3(0.0,0.0,0.5),XMFLOAT4(0.0,0.5,0.5,0.5)},
-	//	{XMFLOAT3(0.0,0.5,0.5),XMFLOAT4(0.0,0.5,0.5,0.5)},
-	//	{XMFLOAT3(0.5,0.0,0.5),XMFLOAT4(0.0,0.5,0.5,0.5)}
-	//};
-
-	D3D11_INPUT_ELEMENT_DESC verDesc[1] = {
-		{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0}
+	D3D11_INPUT_ELEMENT_DESC verDesc[2] = {
+		{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0},
+		{"COLOR",0,DXGI_FORMAT_R32G32B32A32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0}
 	};
+
+	//D3D11_INPUT_ELEMENT_DESC verDesc[1] = {
+	//	{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0}
+	//};
 
 	D3D11_BUFFER_DESC vertexBufferDesc;
 	D3D11_SUBRESOURCE_DATA vertexData;
 
-	vertexBufferDesc.ByteWidth = sizeof(Vertex) * ARRAYSIZE(vertex);	//看看能不能换成sizeof(vertex)或是 sizeof(Vertex) * ARRAYSIZE(vertex)
+	vertexBufferDesc.ByteWidth = sizeof(vertex) * 3;	//看看能不能换成sizeof(vertex)或是 sizeof(Vertex) * ARRAYSIZE(vertex)。结论：不能！因为你可以自己设定一次刷新的内容，不一定要是完整的
 	vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
 	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	vertexBufferDesc.CPUAccessFlags = 0;
@@ -229,8 +231,8 @@ bool RenderPipeline()
 
 	d3dDeviceContext->IASetInputLayout(inputLayout);
 	
-	//d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+	d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	//d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 	
 //顶点着色器阶段(VS)
 
