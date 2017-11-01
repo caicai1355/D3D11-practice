@@ -38,6 +38,7 @@ IDXGISwapChain * d3dSwapChain;
 ID3D11Device * d3dDevice;
 ID3D11DeviceContext  * d3dDeviceContext;
 ID3D11RenderTargetView * renderTargetView;
+ID3D11DepthStencilView * depthStencilView;
 
 //FLOAT colorRGBA[4] = {0.0,1.0,0.0,1.0};	//´¿ÂÌ
 FLOAT colorRGBA[4] = {0.0,0.0,0.0,1.0};	//´¿ºÚ
@@ -137,9 +138,27 @@ void DirectxInit()
 	d3dSwapChain->GetBuffer(0,__uuidof(ID3D11Texture2D),(void**)&backBuffer);
 	
 	d3dDevice->CreateRenderTargetView(backBuffer,NULL,&renderTargetView);
+//Êä³öºÏ²¢Æ÷½×¶Î(OM)
+	ID3D11Texture2D *depthStencilBuffer;
 
-	d3dDeviceContext->OMSetRenderTargets(1,&renderTargetView,NULL);
+	D3D11_TEXTURE2D_DESC texture2DDesc;
 
+	texture2DDesc.Width = WIDTH;
+	texture2DDesc.Height = HEIGHT;
+	texture2DDesc.MipLevels = 1;
+	texture2DDesc.ArraySize = 1;
+	texture2DDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	texture2DDesc.SampleDesc.Count = 1;
+	texture2DDesc.SampleDesc.Quality = 0;
+	texture2DDesc.Usage = D3D11_USAGE_DEFAULT;
+	texture2DDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+	texture2DDesc.CPUAccessFlags = 0;
+	texture2DDesc.MiscFlags = 0;
+
+	d3dDevice->CreateTexture2D(&texture2DDesc,NULL,&depthStencilBuffer);
+	d3dDevice->CreateDepthStencilView(depthStencilBuffer,NULL,&depthStencilView);
+
+	d3dDeviceContext->OMSetRenderTargets(1,&renderTargetView,depthStencilView);
 }
 
 //struct Vertex
@@ -150,6 +169,12 @@ struct Vertex
 {
 	XMFLOAT3 position;
 	XMFLOAT4 color;
+};
+
+DWORD index[] = 
+{
+	0,1,2,
+	2,3,4,
 };
 
 //Vertex vertex[] = 
@@ -192,8 +217,9 @@ bool RenderPipeline()
 	d3dDeviceContext->PSSetShader(PS,0,0);
 
 //ÊäÈë»ã±àÆ÷½×¶Î(IA)
-
+	
 	ID3D11Buffer* triangleVertBuffer;
+	ID3D11Buffer* triangleIndexBuffer;
 	ID3D11InputLayout *inputLayout;
 
 	D3D11_INPUT_ELEMENT_DESC verDesc[2] = {
@@ -222,9 +248,27 @@ bool RenderPipeline()
 	hr = d3dDevice->CreateBuffer(&vertexBufferDesc,&vertexData,&triangleVertBuffer);
 	HR(hr);
 
+	D3D11_BUFFER_DESC indexBufferDesc;
+	D3D11_SUBRESOURCE_DATA indexData;
+
+	indexBufferDesc.ByteWidth = sizeof(DWORD) * 6;
+	indexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	indexBufferDesc.CPUAccessFlags = 0;
+	indexBufferDesc.MiscFlags = 0;
+	indexBufferDesc.StructureByteStride = 0;
+
+	indexData.pSysMem = index;
+	indexData.SysMemPitch = 0;
+	indexData.SysMemSlicePitch = 0;
+
+	hr = d3dDevice->CreateBuffer(&indexBufferDesc,&indexData,&triangleIndexBuffer);
+	HR(hr);
+
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
 	d3dDeviceContext->IASetVertexBuffers(0,1,&triangleVertBuffer,&stride,&offset);
+	d3dDeviceContext->IASetIndexBuffer(triangleIndexBuffer,DXGI_FORMAT_R32_UINT,0);
 
 	hr = d3dDevice->CreateInputLayout(verDesc,ARRAYSIZE(verDesc),VS_Buffer->GetBufferPointer(),VS_Buffer->GetBufferSize(),&inputLayout);
 	HR(hr);
@@ -242,7 +286,7 @@ bool RenderPipeline()
 	viewPort.TopLeftY = 0;
 	viewPort.Width = WIDTH;
 	viewPort.Height = HEIGHT;
-	viewPort.MaxDepth = 0;
+	viewPort.MaxDepth = 1;
 	viewPort.MinDepth = 0;
 
 	d3dDeviceContext->RSSetViewports(1,&viewPort);
@@ -283,6 +327,8 @@ void UpdateScene()
 void DrawScene()
 {
 	d3dDeviceContext->ClearRenderTargetView(renderTargetView,colorRGBA);
-	d3dDeviceContext->Draw(ARRAYSIZE(vertex),0);
+	d3dDeviceContext->ClearDepthStencilView(depthStencilView,D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
+	//d3dDeviceContext->Draw(ARRAYSIZE(vertex),0);
+	d3dDeviceContext->DrawIndexed(6,0,0);
 	d3dSwapChain->Present(0,0);
 }
