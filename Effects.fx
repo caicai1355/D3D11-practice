@@ -1,3 +1,8 @@
+cbuffer CBufferStruct
+{
+	float4x4 WVP;
+};
+
 struct VS_OUTPUT
 {
 	float4 outPos : SV_POSITION;
@@ -8,7 +13,8 @@ struct VS_OUTPUT
 VS_OUTPUT VS(float4 inPos : POSITION,float4 inColor : COLOR)
 {
 	VS_OUTPUT output;
-	output.outPos = inPos;
+	output.outPos = mul(inPos,WVP);
+	//output.outPos = inPos;
 	output.outColor = inColor;
 	return output;
 }

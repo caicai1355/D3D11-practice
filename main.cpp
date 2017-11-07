@@ -33,15 +33,35 @@
 
 const TCHAR ClassName[]=TEXT("dx_world");
 
+struct Vertex
+{
+	XMFLOAT3 position;
+	XMFLOAT4 color;
+};
+struct ConstBufferStruct
+{
+	XMMATRIX WVP;
+};
+
 HWND hwnd;
 IDXGISwapChain * d3dSwapChain;
 ID3D11Device * d3dDevice;
 ID3D11DeviceContext  * d3dDeviceContext;
 ID3D11RenderTargetView * renderTargetView;
 ID3D11DepthStencilView * depthStencilView;
+XMMATRIX worldSpace;
+XMMATRIX viewSpace;
+XMMATRIX positionMatrix;
+ID3D11Buffer *constBuffer;
+ConstBufferStruct constBufferStruct;
+//XMVECTORF32 eyePos = {-0.1f,0.0f,-0.1f,0.0f};
+XMVECTORF32 eyePos = {-2.0f,0.0f,-2.0f,0.0f};
+XMVECTORF32 focusPos = {0.0f,0.0f,0.0f,0.0f};
+XMVECTORF32 upPos = {0.0f,1.0f,0.0f,0.0f};
 
 //FLOAT colorRGBA[4] = {0.0,1.0,0.0,1.0};	//纯绿
 FLOAT colorRGBA[4] = {0.0,0.0,0.0,1.0};	//纯黑
+FLOAT rot = 0.0f;
 
 
 void UpdateScene();
@@ -165,33 +185,32 @@ void DirectxInit()
 //{
 //	XMFLOAT3 position;
 //};
-struct Vertex
-{
-	XMFLOAT3 position;
-	XMFLOAT4 color;
-};
 
+Vertex vertex[] = 
+{
+	{XMFLOAT3(-0.5,0.5,-0.5),XMFLOAT4(0.0,1.0,1.0,1.0)},
+	{XMFLOAT3(0.5,0.5,-0.5),XMFLOAT4(1.0,1.0,0.0,1.0)},
+	{XMFLOAT3(-0.5,-0.5,-0.5),XMFLOAT4(1.0,0.0,1.0,1.0)},
+	{XMFLOAT3(0.5,-0.5,-0.5),XMFLOAT4(0.0,1.0,0.0,1.0)},
+	{XMFLOAT3(-0.5,0.5,0.5),XMFLOAT4(1.0,0.0,0.0,1.0)},
+	{XMFLOAT3(0.5,0.5,0.5),XMFLOAT4(1.0,1.0,1.0,1.0)},
+	{XMFLOAT3(-0.5,-0.5,0.5),XMFLOAT4(0.0,0.0,1.0,1.0)},
+	{XMFLOAT3(0.5,-0.5,0.5),XMFLOAT4(1.0,1.0,1.0,1.0)},
+};
 DWORD index[] = 
 {
 	0,1,2,
-	2,3,4,
-};
-
-//Vertex vertex[] = 
-//{
-//	{XMFLOAT3(0.0,0.0,0.5)},
-//	{XMFLOAT3(0.0,0.5,0.5)},
-//	{XMFLOAT3(0.5,0.0,0.5)},
-//	{XMFLOAT3(0.5,0.5,0.5)},
-//	{XMFLOAT3(0.5,0.5,0.5)},
-//};
-Vertex vertex[] = 
-{
-	{XMFLOAT3(0.0,0.0,0.5),XMFLOAT4(0.0,1.0,1.0,1.0)},
-	{XMFLOAT3(0.0,0.5,0.5),XMFLOAT4(1.0,0.0,1.0,1.0)},
-	{XMFLOAT3(0.5,0.0,0.5),XMFLOAT4(1.0,1.0,0.0,1.0)},
-	{XMFLOAT3(0.5,0.5,0.5),XMFLOAT4(0.0,1.0,1.0,1.0)},
-	{XMFLOAT3(1.0,0.5,0.5),XMFLOAT4(1.0,0.0,1.0,1.0)},
+	2,1,3,
+	4,5,0,
+	0,5,1,
+	4,0,6,
+	6,0,2,
+	1,5,3,
+	3,5,7,
+	7,6,3,
+	3,6,2,
+	5,4,7,
+	7,4,6,
 };
 
 bool RenderPipeline()
@@ -234,7 +253,7 @@ bool RenderPipeline()
 	D3D11_BUFFER_DESC vertexBufferDesc;
 	D3D11_SUBRESOURCE_DATA vertexData;
 
-	vertexBufferDesc.ByteWidth = sizeof(vertex) * 3;	//看看能不能换成sizeof(vertex)或是 sizeof(Vertex) * ARRAYSIZE(vertex)。结论：不能！因为你可以自己设定一次刷新的内容，不一定要是完整的
+	vertexBufferDesc.ByteWidth = sizeof(vertex);	//看看能不能换成sizeof(vertex)或是 sizeof(Vertex) * ARRAYSIZE(vertex)。结论：不能！因为你可以自己设定一次刷新的内容，不一定要是完整的
 	vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
 	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	vertexBufferDesc.CPUAccessFlags = 0;
@@ -251,7 +270,7 @@ bool RenderPipeline()
 	D3D11_BUFFER_DESC indexBufferDesc;
 	D3D11_SUBRESOURCE_DATA indexData;
 
-	indexBufferDesc.ByteWidth = sizeof(DWORD) * 6;
+	indexBufferDesc.ByteWidth = sizeof(DWORD) * 36;
 	indexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
 	indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
 	indexBufferDesc.CPUAccessFlags = 0;
@@ -291,6 +310,17 @@ bool RenderPipeline()
 
 	d3dDeviceContext->RSSetViewports(1,&viewPort);
 
+//常量缓存部分
+	D3D11_BUFFER_DESC constBufferDesc;
+
+	constBufferDesc.ByteWidth = sizeof(ConstBufferStruct);
+	constBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	constBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	constBufferDesc.CPUAccessFlags = 0;
+	constBufferDesc.MiscFlags = 0;
+	constBufferDesc.StructureByteStride = 0;
+	d3dDevice->CreateBuffer(&constBufferDesc,NULL,&constBuffer);
+
 	return true;
 }
 
@@ -326,9 +356,23 @@ void UpdateScene()
 }
 void DrawScene()
 {
+	rot += .0002f;
+	if(rot > 2.76f)rot = 0.1f;
+	eyePos.f[0]=eyePos.f[2]=-rot;
+
+	worldSpace = XMMatrixIdentity();
+	viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
+	positionMatrix =  XMMatrixPerspectiveFovLH(0.4f*3.14f,(float)WIDTH/(float)HEIGHT,1.0f,1000.0f);
+
 	d3dDeviceContext->ClearRenderTargetView(renderTargetView,colorRGBA);
-	d3dDeviceContext->ClearDepthStencilView(depthStencilView,D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
+	d3dDeviceContext->ClearDepthStencilView(depthStencilView,D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 0.6f, 0);
+	//XMMATRIX ractangle_1 = XMMatrixTranslation(2.0f,0.0f,2.0f);
+	XMMATRIX ractangle_1 = XMMatrixIdentity();
+
+	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * positionMatrix);
+	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
+	d3dDeviceContext->VSSetConstantBuffers(0,1,&constBuffer);
 	//d3dDeviceContext->Draw(ARRAYSIZE(vertex),0);
-	d3dDeviceContext->DrawIndexed(6,0,0);
+	d3dDeviceContext->DrawIndexed(36,0,0);
 	d3dSwapChain->Present(0,0);
 }
