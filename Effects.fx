@@ -14,7 +14,6 @@ VS_OUTPUT VS(float4 inPos : POSITION,float4 inColor : COLOR)
 {
 	VS_OUTPUT output;
 	output.outPos = mul(inPos,WVP);
-	//output.outPos = inPos;
 	output.outColor = inColor;
 	return output;
 }

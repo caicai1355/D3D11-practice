@@ -49,13 +49,14 @@ ID3D11Device * d3dDevice;
 ID3D11DeviceContext  * d3dDeviceContext;
 ID3D11RenderTargetView * renderTargetView;
 ID3D11DepthStencilView * depthStencilView;
+ID3D11RasterizerState * rasterState_1;
 XMMATRIX worldSpace;
 XMMATRIX viewSpace;
 XMMATRIX positionMatrix;
 ID3D11Buffer *constBuffer;
 ConstBufferStruct constBufferStruct;
 //XMVECTORF32 eyePos = {-0.1f,0.0f,-0.1f,0.0f};
-XMVECTORF32 eyePos = {-2.0f,0.0f,-2.0f,0.0f};
+XMVECTORF32 eyePos = {-2.0f,2.0f,-2.0f,0.0f};
 XMVECTORF32 focusPos = {0.0f,0.0f,0.0f,0.0f};
 XMVECTORF32 upPos = {0.0f,1.0f,0.0f,0.0f};
 
@@ -120,7 +121,7 @@ void WindowInit(HINSTANCE hInstance)
 	OutputDebugString(L"1");
 
 	RegisterClass(&wc);
-	hwnd = CreateWindow(ClassName,TEXT("windowsnametest"),WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,WIDTH,HEIGHT,NULL,NULL,hInstance,NULL);
+	hwnd = CreateWindow(ClassName,TEXT("windowsnametest"),WS_OVERLAPPEDWINDOW,1200,700,WIDTH,HEIGHT,NULL,NULL,hInstance,NULL);
 	if(!hwnd)
 	{
 		MessageBox(NULL,TEXT("创建窗口失败！"),TEXT("提示"),MB_OK);
@@ -159,7 +160,7 @@ void DirectxInit()
 	
 	d3dDevice->CreateRenderTargetView(backBuffer,NULL,&renderTargetView);
 //输出合并器阶段(OM)
-	ID3D11Texture2D *depthStencilBuffer;
+	ID3D11Texture2D *texture2D;
 
 	D3D11_TEXTURE2D_DESC texture2DDesc;
 
@@ -175,8 +176,8 @@ void DirectxInit()
 	texture2DDesc.CPUAccessFlags = 0;
 	texture2DDesc.MiscFlags = 0;
 
-	d3dDevice->CreateTexture2D(&texture2DDesc,NULL,&depthStencilBuffer);
-	d3dDevice->CreateDepthStencilView(depthStencilBuffer,NULL,&depthStencilView);
+	d3dDevice->CreateTexture2D(&texture2DDesc,NULL,&texture2D);
+	d3dDevice->CreateDepthStencilView(texture2D,NULL,&depthStencilView);
 
 	d3dDeviceContext->OMSetRenderTargets(1,&renderTargetView,depthStencilView);
 }
@@ -305,10 +306,17 @@ bool RenderPipeline()
 	viewPort.TopLeftY = 0;
 	viewPort.Width = WIDTH;
 	viewPort.Height = HEIGHT;
-	viewPort.MaxDepth = 1;
-	viewPort.MinDepth = 0;
+	viewPort.MaxDepth = 1.0;
+	viewPort.MinDepth = 0.0;
 
 	d3dDeviceContext->RSSetViewports(1,&viewPort);
+
+	D3D11_RASTERIZER_DESC rasterStateDesc;
+	ZeroMemory(&rasterStateDesc,sizeof(rasterStateDesc));
+	rasterStateDesc.FillMode = D3D11_FILL_WIREFRAME;
+	rasterStateDesc.CullMode = D3D11_CULL_BACK;
+	d3dDevice->CreateRasterizerState(&rasterStateDesc,&rasterState_1);
+	d3dDeviceContext->RSSetState(rasterState_1);
 
 //常量缓存部分
 	D3D11_BUFFER_DESC constBufferDesc;
@@ -320,6 +328,10 @@ bool RenderPipeline()
 	constBufferDesc.MiscFlags = 0;
 	constBufferDesc.StructureByteStride = 0;
 	d3dDevice->CreateBuffer(&constBufferDesc,NULL,&constBuffer);
+	d3dDeviceContext->VSSetConstantBuffers(0,1,&constBuffer);
+
+	worldSpace = XMMatrixIdentity();
+	positionMatrix =  XMMatrixPerspectiveFovLH(0.4f*3.14f,(float)WIDTH/(float)HEIGHT,1.0f,1000.0f);
 
 	return true;
 }
@@ -353,26 +365,28 @@ void UpdateScene()
 	//	if(colorRGBA[0] > 1.0)colorDirection = true;
 	//}
 
+	rot += .0002f;
+	if(rot > 12.76f)rot = 0.1f;
+	eyePos.f[0]=eyePos.f[2]=-rot;
+
 }
 void DrawScene()
 {
-	rot += .0002f;
-	if(rot > 2.76f)rot = 0.1f;
-	eyePos.f[0]=eyePos.f[2]=-rot;
-
-	worldSpace = XMMatrixIdentity();
-	viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
-	positionMatrix =  XMMatrixPerspectiveFovLH(0.4f*3.14f,(float)WIDTH/(float)HEIGHT,1.0f,1000.0f);
-
 	d3dDeviceContext->ClearRenderTargetView(renderTargetView,colorRGBA);
-	d3dDeviceContext->ClearDepthStencilView(depthStencilView,D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 0.6f, 0);
+	d3dDeviceContext->ClearDepthStencilView(depthStencilView,D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
 	//XMMATRIX ractangle_1 = XMMatrixTranslation(2.0f,0.0f,2.0f);
-	XMMATRIX ractangle_1 = XMMatrixIdentity();
-
+	XMMATRIX ractangle_1 = XMMatrixTranslation(2,0,0);
+	
+	viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
+	
+	d3dDeviceContext->RSSetState(rasterState_1);
+	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * viewSpace * positionMatrix);
+	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
+	d3dDeviceContext->DrawIndexed(36,0,0);
+	
+	d3dDeviceContext->RSSetState(0);
 	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * positionMatrix);
 	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
-	d3dDeviceContext->VSSetConstantBuffers(0,1,&constBuffer);
-	//d3dDeviceContext->Draw(ARRAYSIZE(vertex),0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
 	d3dSwapChain->Present(0,0);
 }
