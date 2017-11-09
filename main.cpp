@@ -62,7 +62,9 @@ XMVECTORF32 upPos = {0.0f,1.0f,0.0f,0.0f};
 
 //FLOAT colorRGBA[4] = {0.0,1.0,0.0,1.0};	//´¿ÂÌ
 FLOAT colorRGBA[4] = {0.0,0.0,0.0,1.0};	//´¿ºÚ
-FLOAT rot = 0.0f;
+FLOAT rot1 = 0.0f;
+FLOAT rot2 = 0.0f;
+
 
 
 void UpdateScene();
@@ -189,14 +191,14 @@ void DirectxInit()
 
 Vertex vertex[] = 
 {
-	{XMFLOAT3(-0.5,0.5,-0.5),XMFLOAT4(0.0,1.0,1.0,1.0)},
+	{XMFLOAT3(-0.5,0.5,-0.5),XMFLOAT4(1.0,1.0,1.0,1.0)},
 	{XMFLOAT3(0.5,0.5,-0.5),XMFLOAT4(1.0,1.0,0.0,1.0)},
 	{XMFLOAT3(-0.5,-0.5,-0.5),XMFLOAT4(1.0,0.0,1.0,1.0)},
-	{XMFLOAT3(0.5,-0.5,-0.5),XMFLOAT4(0.0,1.0,0.0,1.0)},
-	{XMFLOAT3(-0.5,0.5,0.5),XMFLOAT4(1.0,0.0,0.0,1.0)},
-	{XMFLOAT3(0.5,0.5,0.5),XMFLOAT4(1.0,1.0,1.0,1.0)},
+	{XMFLOAT3(0.5,-0.5,-0.5),XMFLOAT4(1.0,0.0,0.0,1.0)},
+	{XMFLOAT3(-0.5,0.5,0.5),XMFLOAT4(0.0,1.0,1.0,1.0)},
+	{XMFLOAT3(0.5,0.5,0.5),XMFLOAT4(0.0,1.0,0.0,1.0)},
 	{XMFLOAT3(-0.5,-0.5,0.5),XMFLOAT4(0.0,0.0,1.0,1.0)},
-	{XMFLOAT3(0.5,-0.5,0.5),XMFLOAT4(1.0,1.0,1.0,1.0)},
+	{XMFLOAT3(0.5,-0.5,0.5),XMFLOAT4(0.0,0.0,0.0,1.0)},
 };
 DWORD index[] = 
 {
@@ -365,9 +367,12 @@ void UpdateScene()
 	//	if(colorRGBA[0] > 1.0)colorDirection = true;
 	//}
 
-	rot += .0002f;
-	if(rot > 12.76f)rot = 0.1f;
-	eyePos.f[0]=eyePos.f[2]=-rot;
+	rot1 += .0002f;
+	if(rot1 > 12.76f)rot1 = 0.1f;
+	eyePos.f[0]=eyePos.f[2]=-rot1;
+
+	rot2 += .0002f;
+	if(rot2 > 3.1415 * 2) rot2 = 0.0f;
 
 }
 void DrawScene()
@@ -375,7 +380,7 @@ void DrawScene()
 	d3dDeviceContext->ClearRenderTargetView(renderTargetView,colorRGBA);
 	d3dDeviceContext->ClearDepthStencilView(depthStencilView,D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
 	//XMMATRIX ractangle_1 = XMMatrixTranslation(2.0f,0.0f,2.0f);
-	XMMATRIX ractangle_1 = XMMatrixTranslation(2,0,0);
+	XMMATRIX ractangle_1 = XMMatrixRotationAxis(XMVectorSet(0,1,0,0),rot2) * XMMatrixTranslation(2,0,0);
 	
 	viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
 	
