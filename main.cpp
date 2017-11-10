@@ -33,10 +33,15 @@
 
 const TCHAR ClassName[]=TEXT("dx_world");
 
+//struct Vertex
+//{
+//	XMFLOAT3 position;
+//	XMFLOAT4 color;
+//};
 struct Vertex
 {
 	XMFLOAT3 position;
-	XMFLOAT4 color;
+	XMFLOAT2 textureCoordinate;
 };
 struct ConstBufferStruct
 {
@@ -55,6 +60,8 @@ XMMATRIX viewSpace;
 XMMATRIX positionMatrix;
 ID3D11Buffer *constBuffer;
 ConstBufferStruct constBufferStruct;
+ID3D11ShaderResourceView * shaderResourceView;
+ID3D11SamplerState * samplerState;
 //XMVECTORF32 eyePos = {-0.1f,0.0f,-0.1f,0.0f};
 XMVECTORF32 eyePos = {-2.0f,2.0f,-2.0f,0.0f};
 XMVECTORF32 focusPos = {0.0f,0.0f,0.0f,0.0f};
@@ -64,6 +71,15 @@ XMVECTORF32 upPos = {0.0f,1.0f,0.0f,0.0f};
 FLOAT colorRGBA[4] = {0.0,0.0,0.0,1.0};	//纯黑
 FLOAT rot1 = 0.0f;
 FLOAT rot2 = 0.0f;
+
+XMFLOAT3 cubeVertex0 = XMFLOAT3(-0.5,0.5,-0.5);
+XMFLOAT3 cubeVertex1 = XMFLOAT3(0.5,0.5,-0.5);
+XMFLOAT3 cubeVertex2 = XMFLOAT3(-0.5,-0.5,-0.5);
+XMFLOAT3 cubeVertex3 = XMFLOAT3(0.5,-0.5,-0.5);
+XMFLOAT3 cubeVertex4 = XMFLOAT3(-0.5,0.5,0.5);
+XMFLOAT3 cubeVertex5 = XMFLOAT3(0.5,0.5,0.5);
+XMFLOAT3 cubeVertex6 = XMFLOAT3(-0.5,-0.5,0.5);
+XMFLOAT3 cubeVertex7 = XMFLOAT3(0.5,-0.5,0.5);
 
 
 
@@ -184,36 +200,83 @@ void DirectxInit()
 	d3dDeviceContext->OMSetRenderTargets(1,&renderTargetView,depthStencilView);
 }
 
-//struct Vertex
+//Vertex vertex[] = 
 //{
-//	XMFLOAT3 position;
+//	{XMFLOAT3(-0.5,0.5,-0.5),XMFLOAT4(1.0,1.0,1.0,1.0)},
+//	{XMFLOAT3(0.5,0.5,-0.5),XMFLOAT4(1.0,1.0,0.0,1.0)},
+//	{XMFLOAT3(-0.5,-0.5,-0.5),XMFLOAT4(1.0,0.0,1.0,1.0)},
+//	{XMFLOAT3(0.5,-0.5,-0.5),XMFLOAT4(1.0,0.0,0.0,1.0)},
+//	{XMFLOAT3(-0.5,0.5,0.5),XMFLOAT4(0.0,1.0,1.0,1.0)},
+//	{XMFLOAT3(0.5,0.5,0.5),XMFLOAT4(0.0,1.0,0.0,1.0)},
+//	{XMFLOAT3(-0.5,-0.5,0.5),XMFLOAT4(0.0,0.0,1.0,1.0)},
+//	{XMFLOAT3(0.5,-0.5,0.5),XMFLOAT4(0.0,0.0,0.0,1.0)},
 //};
-
 Vertex vertex[] = 
 {
-	{XMFLOAT3(-0.5,0.5,-0.5),XMFLOAT4(1.0,1.0,1.0,1.0)},
-	{XMFLOAT3(0.5,0.5,-0.5),XMFLOAT4(1.0,1.0,0.0,1.0)},
-	{XMFLOAT3(-0.5,-0.5,-0.5),XMFLOAT4(1.0,0.0,1.0,1.0)},
-	{XMFLOAT3(0.5,-0.5,-0.5),XMFLOAT4(1.0,0.0,0.0,1.0)},
-	{XMFLOAT3(-0.5,0.5,0.5),XMFLOAT4(0.0,1.0,1.0,1.0)},
-	{XMFLOAT3(0.5,0.5,0.5),XMFLOAT4(0.0,1.0,0.0,1.0)},
-	{XMFLOAT3(-0.5,-0.5,0.5),XMFLOAT4(0.0,0.0,1.0,1.0)},
-	{XMFLOAT3(0.5,-0.5,0.5),XMFLOAT4(0.0,0.0,0.0,1.0)},
+	{cubeVertex0,XMFLOAT2(0.0,0.0)},
+	{cubeVertex1,XMFLOAT2(1.0,0.0)},
+	{cubeVertex2,XMFLOAT2(0.0,1.0)},
+	{cubeVertex3,XMFLOAT2(1.0,1.0)},
+	
+	{cubeVertex4,XMFLOAT2(0.0,0.0)},
+	{cubeVertex0,XMFLOAT2(1.0,0.0)},
+	{cubeVertex6,XMFLOAT2(0.0,1.0)},
+	{cubeVertex2,XMFLOAT2(1.0,1.0)},
+	
+	{cubeVertex4,XMFLOAT2(0.0,0.0)},
+	{cubeVertex5,XMFLOAT2(1.0,0.0)},
+	{cubeVertex0,XMFLOAT2(0.0,1.0)},
+	{cubeVertex1,XMFLOAT2(1.0,1.0)},
+	
+	{cubeVertex1,XMFLOAT2(0.0,0.0)},
+	{cubeVertex5,XMFLOAT2(1.0,0.0)},
+	{cubeVertex3,XMFLOAT2(0.0,1.0)},
+	{cubeVertex7,XMFLOAT2(1.0,1.0)},
+	
+	{cubeVertex7,XMFLOAT2(0.0,0.0)},
+	{cubeVertex6,XMFLOAT2(1.0,0.0)},
+	{cubeVertex3,XMFLOAT2(0.0,1.0)},
+	{cubeVertex2,XMFLOAT2(1.0,1.0)},
+	
+	{cubeVertex5,XMFLOAT2(0.0,0.0)},
+	{cubeVertex4,XMFLOAT2(1.0,0.0)},
+	{cubeVertex7,XMFLOAT2(0.0,1.0)},
+	{cubeVertex6,XMFLOAT2(1.0,1.0)},
 };
+//DWORD index[] = 
+//{
+//	0,1,2,
+//	2,1,3,
+//	4,5,0,
+//	0,5,1,
+//	4,0,6,
+//	6,0,2,
+//	1,5,3,
+//	3,5,7,
+//	7,6,3,
+//	3,6,2,
+//	5,4,7,
+//	7,4,6,
+//};
 DWORD index[] = 
 {
 	0,1,2,
 	2,1,3,
-	4,5,0,
-	0,5,1,
-	4,0,6,
-	6,0,2,
-	1,5,3,
-	3,5,7,
-	7,6,3,
-	3,6,2,
-	5,4,7,
-	7,4,6,
+
+	4,5,6,
+	6,5,7,
+	
+	8,9,10,
+	10,9,11,
+	
+	12,13,14,
+	14,13,15,
+	
+	16,17,18,
+	18,17,19,
+	
+	20,21,22,
+	22,21,23,
 };
 
 bool RenderPipeline()
@@ -246,7 +309,7 @@ bool RenderPipeline()
 
 	D3D11_INPUT_ELEMENT_DESC verDesc[2] = {
 		{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0},
-		{"COLOR",0,DXGI_FORMAT_R32G32B32A32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0}
+		{"TEXTURE",0,DXGI_FORMAT_R32G32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0}
 	};
 
 	//D3D11_INPUT_ELEMENT_DESC verDesc[1] = {
@@ -335,6 +398,19 @@ bool RenderPipeline()
 	worldSpace = XMMatrixIdentity();
 	positionMatrix =  XMMatrixPerspectiveFovLH(0.4f*3.14f,(float)WIDTH/(float)HEIGHT,1.0f,1000.0f);
 
+//纹理部分
+	HR(D3DX11CreateShaderResourceViewFromFile(d3dDevice,L"braynzar.jpg",NULL,NULL,&shaderResourceView,NULL));
+	D3D11_SAMPLER_DESC samplerDesc;
+	ZeroMemory(&samplerDesc,sizeof(D3D11_SAMPLER_DESC));
+	samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;	//可以试一下换别的选项看看效果
+	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;	//可以试一下换别的选项看看效果
+	samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;	//可以试一下换别的选项看看效果
+	samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;	//可以试一下换别的选项看看效果
+	//samplerDesc.MaxAnisotropy = 16;
+	samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER; //可以试着修改一下？
+	samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+	HR(d3dDevice->CreateSamplerState(&samplerDesc,&samplerState));
+
 	return true;
 }
 
@@ -384,12 +460,16 @@ void DrawScene()
 	
 	viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
 	
-	d3dDeviceContext->RSSetState(rasterState_1);
+	//d3dDeviceContext->RSSetState(rasterState_1);
 	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * viewSpace * positionMatrix);
 	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
+	
+	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView);
+	d3dDeviceContext->PSSetSamplers(0,1,&samplerState);
+
 	d3dDeviceContext->DrawIndexed(36,0,0);
 	
-	d3dDeviceContext->RSSetState(0);
+	//d3dDeviceContext->RSSetState(0);
 	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * positionMatrix);
 	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);

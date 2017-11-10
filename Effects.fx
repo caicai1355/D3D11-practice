@@ -3,23 +3,26 @@ cbuffer CBufferStruct
 	float4x4 WVP;
 };
 
+Texture2D ObjTexture;
+SamplerState ObjSamplerState;
+
 struct VS_OUTPUT
 {
 	float4 outPos : SV_POSITION;
-	float4 outColor : COLOR;
+	float2 outTexture : TEXTURE;
 };
 
 
-VS_OUTPUT VS(float4 inPos : POSITION,float4 inColor : COLOR)
+VS_OUTPUT VS(float4 inPos : POSITION,float2 inTexture : TEXTURE)
 {
 	VS_OUTPUT output;
 	output.outPos = mul(inPos,WVP);
-	output.outColor = inColor;
+	output.outTexture = inTexture;
 	return output;
 }
 
 float4 PS(VS_OUTPUT input) : SV_TARGET
 {
 	//return float4(0.0f, 0.0f, 1.0f, 1.0f);
-    return input.outColor;
+    return ObjTexture.Sample( ObjSamplerState, input.outTexture);
 }
