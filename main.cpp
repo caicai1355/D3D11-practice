@@ -10,8 +10,8 @@
 #include <exception>
 #include <stdio.h>
 
-#define WIDTH 100
-#define HEIGHT 100 
+#define WIDTH 200
+#define HEIGHT 200 
 
 #if defined(DEBUG) | defined(_DEBUG)
     #ifndef HR
@@ -55,6 +55,7 @@ ID3D11DeviceContext  * d3dDeviceContext;
 ID3D11RenderTargetView * renderTargetView;
 ID3D11DepthStencilView * depthStencilView;
 ID3D11RasterizerState * rasterState_1;
+ID3D11RasterizerState * rasterState_2;
 XMMATRIX worldSpace;
 XMMATRIX viewSpace;
 XMMATRIX positionMatrix;
@@ -62,6 +63,7 @@ ID3D11Buffer *constBuffer;
 ConstBufferStruct constBufferStruct;
 ID3D11ShaderResourceView * shaderResourceView;
 ID3D11SamplerState * samplerState;
+ID3D11BlendState * blendState;
 //XMVECTORF32 eyePos = {-0.1f,0.0f,-0.1f,0.0f};
 XMVECTORF32 eyePos = {-2.0f,2.0f,-2.0f,0.0f};
 XMVECTORF32 focusPos = {0.0f,0.0f,0.0f,0.0f};
@@ -80,6 +82,11 @@ XMFLOAT3 cubeVertex4 = XMFLOAT3(-0.5,0.5,0.5);
 XMFLOAT3 cubeVertex5 = XMFLOAT3(0.5,0.5,0.5);
 XMFLOAT3 cubeVertex6 = XMFLOAT3(-0.5,-0.5,0.5);
 XMFLOAT3 cubeVertex7 = XMFLOAT3(0.5,-0.5,0.5);
+#define CONTEXT_PIC_NUM 1.0
+XMFLOAT2 leftUp = XMFLOAT2(0.0,0.0);
+XMFLOAT2 rightUp = XMFLOAT2(CONTEXT_PIC_NUM,0.0);
+XMFLOAT2 leftDown = XMFLOAT2(0.0,CONTEXT_PIC_NUM);
+XMFLOAT2 rightDown = XMFLOAT2(CONTEXT_PIC_NUM,CONTEXT_PIC_NUM);
 
 
 
@@ -213,35 +220,35 @@ void DirectxInit()
 //};
 Vertex vertex[] = 
 {
-	{cubeVertex0,XMFLOAT2(0.0,0.0)},
-	{cubeVertex1,XMFLOAT2(1.0,0.0)},
-	{cubeVertex2,XMFLOAT2(0.0,1.0)},
-	{cubeVertex3,XMFLOAT2(1.0,1.0)},
+	{cubeVertex0,leftUp},
+	{cubeVertex1,rightUp},
+	{cubeVertex2,leftDown},
+	{cubeVertex3,rightDown},
 	
-	{cubeVertex4,XMFLOAT2(0.0,0.0)},
-	{cubeVertex0,XMFLOAT2(1.0,0.0)},
-	{cubeVertex6,XMFLOAT2(0.0,1.0)},
-	{cubeVertex2,XMFLOAT2(1.0,1.0)},
+	{cubeVertex4,leftUp},
+	{cubeVertex0,rightUp},
+	{cubeVertex6,leftDown},
+	{cubeVertex2,rightDown},
 	
-	{cubeVertex4,XMFLOAT2(0.0,0.0)},
-	{cubeVertex5,XMFLOAT2(1.0,0.0)},
-	{cubeVertex0,XMFLOAT2(0.0,1.0)},
-	{cubeVertex1,XMFLOAT2(1.0,1.0)},
+	{cubeVertex4,leftUp},
+	{cubeVertex5,rightUp},
+	{cubeVertex0,leftDown},
+	{cubeVertex1,rightDown},
 	
-	{cubeVertex1,XMFLOAT2(0.0,0.0)},
-	{cubeVertex5,XMFLOAT2(1.0,0.0)},
-	{cubeVertex3,XMFLOAT2(0.0,1.0)},
-	{cubeVertex7,XMFLOAT2(1.0,1.0)},
+	{cubeVertex1,leftUp},
+	{cubeVertex5,rightUp},
+	{cubeVertex3,leftDown},
+	{cubeVertex7,rightDown},
 	
-	{cubeVertex7,XMFLOAT2(0.0,0.0)},
-	{cubeVertex6,XMFLOAT2(1.0,0.0)},
-	{cubeVertex3,XMFLOAT2(0.0,1.0)},
-	{cubeVertex2,XMFLOAT2(1.0,1.0)},
+	{cubeVertex7,leftUp},
+	{cubeVertex6,rightUp},
+	{cubeVertex3,leftDown},
+	{cubeVertex2,rightDown},
 	
-	{cubeVertex5,XMFLOAT2(0.0,0.0)},
-	{cubeVertex4,XMFLOAT2(1.0,0.0)},
-	{cubeVertex7,XMFLOAT2(0.0,1.0)},
-	{cubeVertex6,XMFLOAT2(1.0,1.0)},
+	{cubeVertex5,leftUp},
+	{cubeVertex4,rightUp},
+	{cubeVertex7,leftDown},
+	{cubeVertex6,rightDown},
 };
 //DWORD index[] = 
 //{
@@ -378,10 +385,14 @@ bool RenderPipeline()
 
 	D3D11_RASTERIZER_DESC rasterStateDesc;
 	ZeroMemory(&rasterStateDesc,sizeof(rasterStateDesc));
-	rasterStateDesc.FillMode = D3D11_FILL_WIREFRAME;
+	//rasterStateDesc.FillMode = D3D11_FILL_WIREFRAME;
+	rasterStateDesc.FillMode = D3D11_FILL_SOLID;
 	rasterStateDesc.CullMode = D3D11_CULL_BACK;
+	rasterStateDesc.FrontCounterClockwise = false;
 	d3dDevice->CreateRasterizerState(&rasterStateDesc,&rasterState_1);
-	d3dDeviceContext->RSSetState(rasterState_1);
+	rasterStateDesc.FrontCounterClockwise = true;
+	d3dDevice->CreateRasterizerState(&rasterStateDesc,&rasterState_2);
+	//d3dDeviceContext->RSSetState(rasterState_1);
 
 //常量缓存部分
 	D3D11_BUFFER_DESC constBufferDesc;
@@ -403,13 +414,37 @@ bool RenderPipeline()
 	D3D11_SAMPLER_DESC samplerDesc;
 	ZeroMemory(&samplerDesc,sizeof(D3D11_SAMPLER_DESC));
 	samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;	//可以试一下换别的选项看看效果
-	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;	//可以试一下换别的选项看看效果
-	samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;	//可以试一下换别的选项看看效果
-	samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;	//可以试一下换别的选项看看效果
+	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
+	samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
+	samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
 	//samplerDesc.MaxAnisotropy = 16;
 	samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER; //可以试着修改一下？
 	samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+	//samplerDesc.BorderColor[0] = 1.0f;
+	//samplerDesc.BorderColor[3] = 1.0f;
 	HR(d3dDevice->CreateSamplerState(&samplerDesc,&samplerState));
+
+	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView);
+	d3dDeviceContext->PSSetSamplers(0,1,&samplerState);
+
+//混合渲染
+	D3D11_BLEND_DESC blendDesc;
+	D3D11_RENDER_TARGET_BLEND_DESC RenderTargetBlendDesc;
+
+	RenderTargetBlendDesc.BlendEnable = true;
+	RenderTargetBlendDesc.SrcBlend = D3D11_BLEND_SRC_COLOR;
+	RenderTargetBlendDesc.DestBlend = D3D11_BLEND_BLEND_FACTOR;
+	RenderTargetBlendDesc.BlendOp = D3D11_BLEND_OP_ADD;
+	RenderTargetBlendDesc.SrcBlendAlpha = D3D11_BLEND_ONE;
+	RenderTargetBlendDesc.DestBlendAlpha = D3D11_BLEND_ZERO;
+	RenderTargetBlendDesc.BlendOpAlpha = D3D11_BLEND_OP_ADD;
+	RenderTargetBlendDesc.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+
+	ZeroMemory(&blendDesc,sizeof(blendDesc));
+	blendDesc.AlphaToCoverageEnable = true;
+	blendDesc.RenderTarget[0] = RenderTargetBlendDesc;
+
+	d3dDevice->CreateBlendState(&blendDesc,&blendState);
 
 	return true;
 }
@@ -455,23 +490,31 @@ void DrawScene()
 {
 	d3dDeviceContext->ClearRenderTargetView(renderTargetView,colorRGBA);
 	d3dDeviceContext->ClearDepthStencilView(depthStencilView,D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
+
 	//XMMATRIX ractangle_1 = XMMatrixTranslation(2.0f,0.0f,2.0f);
 	XMMATRIX ractangle_1 = XMMatrixRotationAxis(XMVectorSet(0,1,0,0),rot2) * XMMatrixTranslation(2,0,0);
-	
 	viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
 	
-	//d3dDeviceContext->RSSetState(rasterState_1);
+	float blendFactor[] = {0.75f, 0.75f, 0.75f, 1.0f};
+	d3dDeviceContext->OMSetBlendState(blendState,blendFactor,0xffffffff);
+	d3dDeviceContext->RSSetState(rasterState_1);
 	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * viewSpace * positionMatrix);
 	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
-	
-	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView);
-	d3dDeviceContext->PSSetSamplers(0,1,&samplerState);
-
+	d3dDeviceContext->DrawIndexed(36,0,0);
+	d3dDeviceContext->RSSetState(rasterState_2);
+	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * viewSpace * positionMatrix);
+	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
 	
-	//d3dDeviceContext->RSSetState(0);
+	d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
+	d3dDeviceContext->RSSetState(rasterState_1);
+	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * positionMatrix);
+	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
+	d3dDeviceContext->RSSetState(rasterState_2);
+	d3dDeviceContext->DrawIndexed(36,0,0);
 	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * positionMatrix);
 	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
+
 	d3dSwapChain->Present(0,0);
 }

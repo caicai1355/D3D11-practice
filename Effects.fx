@@ -24,5 +24,6 @@ VS_OUTPUT VS(float4 inPos : POSITION,float2 inTexture : TEXTURE)
 float4 PS(VS_OUTPUT input) : SV_TARGET
 {
 	//return float4(0.0f, 0.0f, 1.0f, 1.0f);
-    return ObjTexture.Sample( ObjSamplerState, input.outTexture);
+    //return float4(ObjTexture.Sample( ObjSamplerState, input.outTexture).x,ObjTexture.Sample( ObjSamplerState, input.outTexture).y,ObjTexture.Sample( ObjSamplerState, input.outTexture).z,0.2f);
+	return ObjTexture.Sample( ObjSamplerState, input.outTexture);
 }
