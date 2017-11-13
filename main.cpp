@@ -501,6 +501,7 @@ void DrawScene()
 	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * viewSpace * positionMatrix);
 	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
+
 	d3dDeviceContext->RSSetState(rasterState_2);
 	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * viewSpace * positionMatrix);
 	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
@@ -511,6 +512,7 @@ void DrawScene()
 	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * positionMatrix);
 	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
 	d3dDeviceContext->RSSetState(rasterState_2);
+
 	d3dDeviceContext->DrawIndexed(36,0,0);
 	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * positionMatrix);
 	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
