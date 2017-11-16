@@ -25,5 +25,7 @@ float4 PS(VS_OUTPUT input) : SV_TARGET
 {
 	//return float4(0.0f, 0.0f, 1.0f, 1.0f);
     //return float4(ObjTexture.Sample( ObjSamplerState, input.outTexture).x,ObjTexture.Sample( ObjSamplerState, input.outTexture).y,ObjTexture.Sample( ObjSamplerState, input.outTexture).z,0.2f);
-	return ObjTexture.Sample( ObjSamplerState, input.outTexture);
+	float4 temp = ObjTexture.Sample( ObjSamplerState, input.outTexture);
+	clip(temp.a - 0.25);
+	return temp;
 }

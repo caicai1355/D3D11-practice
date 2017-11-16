@@ -1,17 +1,32 @@
-//#pragma comment(lib, "d3d11.lib")
-//#pragma comment(lib, "d3dx11.lib")
-//#pragma comment(lib, "d3dx10.lib")
+//Include and link appropriate libraries and headers//
+#pragma comment(lib, "d3d11.lib")
+#pragma comment(lib, "d3dx11.lib")
+#pragma comment(lib, "d3dx10.lib")
+///////////////**************new**************////////////////////
+#pragma comment (lib, "D3D10_1.lib")
+#pragma comment (lib, "DXGI.lib")
+#pragma comment (lib, "D2D1.lib")
+#pragma comment (lib, "dwrite.lib")
+///////////////**************new**************////////////////////
 
 #include <Windows.h>
 #include <D3D11.h>
 #include <d3dx11.h>
+#include <d3dx10.h>
 #include <DxErr.h>
 #include <xnamath.h>
 #include <exception>
 #include <stdio.h>
+///////////////**************new**************////////////////////
+#include <D3D10_1.h>
+#include <DXGI.h>
+#include <D2D1.h>
+#include <sstream>
+#include <dwrite.h>
+///////////////**************new**************////////////////////
 
-#define WIDTH 200
-#define HEIGHT 200 
+#define WIDTH 100
+#define HEIGHT 100 
 
 #if defined(DEBUG) | defined(_DEBUG)
     #ifndef HR
@@ -51,11 +66,14 @@ struct ConstBufferStruct
 HWND hwnd;
 IDXGISwapChain * d3dSwapChain;
 ID3D11Device * d3dDevice;
+ID3D10Device1 * d3d10Device;
 ID3D11DeviceContext  * d3dDeviceContext;
 ID3D11RenderTargetView * renderTargetView;
 ID3D11DepthStencilView * depthStencilView;
 ID3D11RasterizerState * rasterState_1;
 ID3D11RasterizerState * rasterState_2;
+ID3D11Texture2D *depthStencilTexture;
+ID3D11Texture2D *myTestTexture;
 XMMATRIX worldSpace;
 XMMATRIX viewSpace;
 XMMATRIX positionMatrix;
@@ -65,7 +83,7 @@ ID3D11ShaderResourceView * shaderResourceView;
 ID3D11SamplerState * samplerState;
 ID3D11BlendState * blendState;
 //XMVECTORF32 eyePos = {-0.1f,0.0f,-0.1f,0.0f};
-XMVECTORF32 eyePos = {-2.0f,2.0f,-2.0f,0.0f};
+XMVECTORF32 eyePos = {-1.0f,1.0f,-1.0f,0.0f};
 XMVECTORF32 focusPos = {0.0f,0.0f,0.0f,0.0f};
 XMVECTORF32 upPos = {0.0f,1.0f,0.0f,0.0f};
 
@@ -88,7 +106,7 @@ XMFLOAT2 rightUp = XMFLOAT2(CONTEXT_PIC_NUM,0.0);
 XMFLOAT2 leftDown = XMFLOAT2(0.0,CONTEXT_PIC_NUM);
 XMFLOAT2 rightDown = XMFLOAT2(CONTEXT_PIC_NUM,CONTEXT_PIC_NUM);
 
-
+void D2D_init(IDXGIAdapter1 *Adapter);
 
 void UpdateScene();
 void DrawScene();
@@ -178,14 +196,25 @@ void DirectxInit()
 	d3dSwapChainDesc.SampleDesc.Count = 1;
 	d3dSwapChainDesc.SampleDesc.Quality = 0;
 
-	D3D11CreateDeviceAndSwapChain(NULL,D3D_DRIVER_TYPE_HARDWARE,NULL,NULL,NULL,NULL,D3D11_SDK_VERSION,&d3dSwapChainDesc,&d3dSwapChain,&d3dDevice,NULL,&d3dDeviceContext);
+	// Create DXGI factory to enumerate adapters///////////////////////////////////////////////////////////////////////////
+	IDXGIFactory1 *DXGIFactory;
+	HRESULT hr = CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&DXGIFactory);	
+	// Use the first adapter	
+	IDXGIAdapter1 *Adapter;
+	hr = DXGIFactory->EnumAdapters1(0, &Adapter);
+	DXGIFactory->Release();	
+
+	D3D11CreateDeviceAndSwapChain(Adapter,D3D_DRIVER_TYPE_UNKNOWN,NULL,D3D11_CREATE_DEVICE_DEBUG|D3D11_CREATE_DEVICE_BGRA_SUPPORT,NULL,NULL,D3D11_SDK_VERSION,&d3dSwapChainDesc,&d3dSwapChain,&d3dDevice,NULL,&d3dDeviceContext);	//后面试一下把adapter换回NULL会怎么样
+	//D3D11CreateDeviceAndSwapChain(NULL,D3D_DRIVER_TYPE_HARDWARE,NULL,NULL,NULL,NULL,D3D11_SDK_VERSION,&d3dSwapChainDesc,&d3dSwapChain,&d3dDevice,NULL,&d3dDeviceContext);
+	
+	D2D_init(Adapter);
+	Adapter->Release();
 
 	ID3D11Texture2D * backBuffer;
 	d3dSwapChain->GetBuffer(0,__uuidof(ID3D11Texture2D),(void**)&backBuffer);
 	
 	d3dDevice->CreateRenderTargetView(backBuffer,NULL,&renderTargetView);
 //输出合并器阶段(OM)
-	ID3D11Texture2D *texture2D;
 
 	D3D11_TEXTURE2D_DESC texture2DDesc;
 
@@ -201,10 +230,85 @@ void DirectxInit()
 	texture2DDesc.CPUAccessFlags = 0;
 	texture2DDesc.MiscFlags = 0;
 
-	d3dDevice->CreateTexture2D(&texture2DDesc,NULL,&texture2D);
-	d3dDevice->CreateDepthStencilView(texture2D,NULL,&depthStencilView);
+	d3dDevice->CreateTexture2D(&texture2DDesc,NULL,&depthStencilTexture);
+	d3dDevice->CreateDepthStencilView(depthStencilTexture,NULL,&depthStencilView);
 
 	d3dDeviceContext->OMSetRenderTargets(1,&renderTargetView,depthStencilView);
+
+}
+
+void D2D_init(IDXGIAdapter1 *Adapter)
+{
+	HR(D3D10CreateDevice1(Adapter,D3D10_DRIVER_TYPE_HARDWARE,NULL,D3D10_CREATE_DEVICE_DEBUG|D3D10_CREATE_DEVICE_BGRA_SUPPORT,D3D10_FEATURE_LEVEL_9_3,D3D10_1_SDK_VERSION,&d3d10Device));
+	D3D11_TEXTURE2D_DESC texture2DDescTemp;
+	IDXGIKeyedMutex * keyMutex11;
+	IDXGIResource * sharedResource;
+	HANDLE sharedHandle;
+
+	texture2DDescTemp.Width = WIDTH;
+	texture2DDescTemp.Height = HEIGHT;
+	texture2DDescTemp.MipLevels = 1;
+	texture2DDescTemp.ArraySize = 1;
+	texture2DDescTemp.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+	texture2DDescTemp.SampleDesc.Count = 1;
+	texture2DDescTemp.SampleDesc.Quality = 0;
+	texture2DDescTemp.Usage = D3D11_USAGE_DEFAULT;
+	texture2DDescTemp.BindFlags = D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_RENDER_TARGET;
+	texture2DDescTemp.CPUAccessFlags = 0;
+	texture2DDescTemp.MiscFlags = D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX;
+	
+	d3dDevice->CreateTexture2D(&texture2DDescTemp,NULL,&myTestTexture);
+	myTestTexture->QueryInterface(__uuidof(IDXGIKeyedMutex),(void**)&keyMutex11);
+	myTestTexture->QueryInterface(__uuidof(IDXGIResource),(void**)&sharedResource);
+	sharedResource->GetSharedHandle(&sharedHandle);
+	sharedResource->Release();
+
+	// Open the surface for the shared texture in D3D10.1///////////////////////////////////////////////////////////////////
+	IDXGISurface1 *sharedSurface;
+	IDXGIKeyedMutex * keyMutex10;
+	d3d10Device->OpenSharedResource(sharedHandle,__uuidof(IDXGISurface1),(void**)&sharedSurface);
+	sharedSurface->QueryInterface(__uuidof(IDXGIKeyedMutex),(void**)&keyMutex10);
+
+	// Create D2D factory///////////////////////////////////////////////////////////////////////////////////////////////////
+	ID2D1Factory *d2dFactory; 
+	ID2D1RenderTarget * d2dRenderTarget;
+	HR(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,__uuidof(ID2D1Factory),(void**)&d2dFactory));
+
+	D2D1_RENDER_TARGET_PROPERTIES renderTargetProperties;
+
+	ZeroMemory(&renderTargetProperties, sizeof(renderTargetProperties));
+
+	renderTargetProperties.type = D2D1_RENDER_TARGET_TYPE_HARDWARE;
+	renderTargetProperties.pixelFormat = D2D1::PixelFormat(DXGI_FORMAT_UNKNOWN, D2D1_ALPHA_MODE_PREMULTIPLIED);	
+
+	HR(d2dFactory->CreateDxgiSurfaceRenderTarget(sharedSurface, &renderTargetProperties, &d2dRenderTarget));
+
+	sharedSurface->Release();
+	d2dFactory->Release();	
+
+	ID2D1SolidColorBrush *Brush;
+	HR(d2dRenderTarget->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 0.0f, 1.0f), &Brush));
+
+	//DirectWrite///////////////////////////////////////////////////////////////////////////////////////////////////////////
+	IDWriteFactory *writeFactory;
+	IDWriteTextFormat *textFormat;
+	HR(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),reinterpret_cast<IUnknown**>(&writeFactory)));
+
+	HR(writeFactory->CreateTextFormat(
+		L"Script",
+		NULL,
+		DWRITE_FONT_WEIGHT_REGULAR,
+		DWRITE_FONT_STYLE_NORMAL,
+		DWRITE_FONT_STRETCH_NORMAL,
+		24.0f,
+		L"en-us",
+		&textFormat
+		));
+
+	HR(textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING));
+	HR(textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR));
+
+	d3d10Device->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_POINTLIST);	
 }
 
 //Vertex vertex[] = 
@@ -368,7 +472,6 @@ bool RenderPipeline()
 	d3dDeviceContext->IASetInputLayout(inputLayout);
 	
 	d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	//d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 	
 //顶点着色器阶段(VS)
 
@@ -411,6 +514,7 @@ bool RenderPipeline()
 
 //纹理部分
 	HR(D3DX11CreateShaderResourceViewFromFile(d3dDevice,L"braynzar.jpg",NULL,NULL,&shaderResourceView,NULL));
+	//HR(D3DX11CreateShaderResourceViewFromFile(d3dDevice,L"bb.jpg",NULL,NULL,&shaderResourceView,NULL));
 	D3D11_SAMPLER_DESC samplerDesc;
 	ZeroMemory(&samplerDesc,sizeof(D3D11_SAMPLER_DESC));
 	samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;	//可以试一下换别的选项看看效果
@@ -445,6 +549,10 @@ bool RenderPipeline()
 	blendDesc.RenderTarget[0] = RenderTargetBlendDesc;
 
 	d3dDevice->CreateBlendState(&blendDesc,&blendState);
+	
+	float blendFactor[] = {0.75f, 0.75f, 0.75f, 1.0f};
+	d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
+	d3dDeviceContext->OMSetBlendState(blendState,blendFactor,0xffffffff);
 
 	return true;
 }
@@ -478,9 +586,9 @@ void UpdateScene()
 	//	if(colorRGBA[0] > 1.0)colorDirection = true;
 	//}
 
-	rot1 += .0002f;
-	if(rot1 > 12.76f)rot1 = 0.1f;
-	eyePos.f[0]=eyePos.f[2]=-rot1;
+	//rot1 += .0002f;
+	//if(rot1 > 12.76f)rot1 = 0.1f;
+	//eyePos.f[0]=eyePos.f[2]=-rot1;
 
 	rot2 += .0002f;
 	if(rot2 > 3.1415 * 2) rot2 = 0.0f;
@@ -495,10 +603,13 @@ void DrawScene()
 	XMMATRIX ractangle_1 = XMMatrixRotationAxis(XMVectorSet(0,1,0,0),rot2) * XMMatrixTranslation(2,0,0);
 	viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
 	
-	float blendFactor[] = {0.75f, 0.75f, 0.75f, 1.0f};
-	d3dDeviceContext->OMSetBlendState(blendState,blendFactor,0xffffffff);
+	d3dDeviceContext->RSSetState(rasterState_2);
+	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * positionMatrix);
+	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
+	d3dDeviceContext->DrawIndexed(36,0,0);
+
 	d3dDeviceContext->RSSetState(rasterState_1);
-	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * viewSpace * positionMatrix);
+	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * positionMatrix);
 	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
 
@@ -507,14 +618,8 @@ void DrawScene()
 	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
 	
-	d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
 	d3dDeviceContext->RSSetState(rasterState_1);
-	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * positionMatrix);
-	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
-	d3dDeviceContext->RSSetState(rasterState_2);
-
-	d3dDeviceContext->DrawIndexed(36,0,0);
-	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * positionMatrix);
+	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * viewSpace * positionMatrix);
 	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
 
