@@ -66,14 +66,14 @@ struct ConstBufferStruct
 HWND hwnd;
 IDXGISwapChain * d3dSwapChain;
 ID3D11Device * d3dDevice;
-ID3D10Device1 * d3d10Device;
 ID3D11DeviceContext  * d3dDeviceContext;
 ID3D11RenderTargetView * renderTargetView;
 ID3D11DepthStencilView * depthStencilView;
 ID3D11RasterizerState * rasterState_1;
 ID3D11RasterizerState * rasterState_2;
 ID3D11Texture2D *depthStencilTexture;
-ID3D11Texture2D *myTestTexture;
+ID3D11Buffer* squareVertBuffer;
+ID3D11Buffer* squareIndexBuffer;
 XMMATRIX worldSpace;
 XMMATRIX viewSpace;
 XMMATRIX positionMatrix;
@@ -82,10 +82,24 @@ ConstBufferStruct constBufferStruct;
 ID3D11ShaderResourceView * shaderResourceView;
 ID3D11SamplerState * samplerState;
 ID3D11BlendState * blendState;
+ID3D10Blob* VS_Buffer;
+ID3D10Blob* PS_Buffer;
 //XMVECTORF32 eyePos = {-0.1f,0.0f,-0.1f,0.0f};
 XMVECTORF32 eyePos = {-1.0f,1.0f,-1.0f,0.0f};
 XMVECTORF32 focusPos = {0.0f,0.0f,0.0f,0.0f};
 XMVECTORF32 upPos = {0.0f,1.0f,0.0f,0.0f};
+
+//textD2D
+ID3D10Device1 * d3d10Device;
+ID3D11Texture2D *myTestTexture;
+ID3D11ShaderResourceView * textResourceView;
+ID2D1RenderTarget * d2dRenderTarget;
+IDWriteTextFormat *textFormat;
+ID2D1SolidColorBrush *Brush;
+ID3D11Buffer* textVertBuffer;
+ID3D11Buffer* textIndexBuffer;
+IDXGIKeyedMutex * keyMutex11;
+IDXGIKeyedMutex * keyMutex10;
 
 //FLOAT colorRGBA[4] = {0.0,1.0,0.0,1.0};	//纯绿
 FLOAT colorRGBA[4] = {0.0,0.0,0.0,1.0};	//纯黑
@@ -107,6 +121,7 @@ XMFLOAT2 leftDown = XMFLOAT2(0.0,CONTEXT_PIC_NUM);
 XMFLOAT2 rightDown = XMFLOAT2(CONTEXT_PIC_NUM,CONTEXT_PIC_NUM);
 
 void D2D_init(IDXGIAdapter1 *Adapter);
+void IAInitText();
 
 void UpdateScene();
 void DrawScene();
@@ -241,7 +256,6 @@ void D2D_init(IDXGIAdapter1 *Adapter)
 {
 	HR(D3D10CreateDevice1(Adapter,D3D10_DRIVER_TYPE_HARDWARE,NULL,D3D10_CREATE_DEVICE_DEBUG|D3D10_CREATE_DEVICE_BGRA_SUPPORT,D3D10_FEATURE_LEVEL_9_3,D3D10_1_SDK_VERSION,&d3d10Device));
 	D3D11_TEXTURE2D_DESC texture2DDescTemp;
-	IDXGIKeyedMutex * keyMutex11;
 	IDXGIResource * sharedResource;
 	HANDLE sharedHandle;
 
@@ -265,13 +279,11 @@ void D2D_init(IDXGIAdapter1 *Adapter)
 
 	// Open the surface for the shared texture in D3D10.1///////////////////////////////////////////////////////////////////
 	IDXGISurface1 *sharedSurface;
-	IDXGIKeyedMutex * keyMutex10;
 	d3d10Device->OpenSharedResource(sharedHandle,__uuidof(IDXGISurface1),(void**)&sharedSurface);
 	sharedSurface->QueryInterface(__uuidof(IDXGIKeyedMutex),(void**)&keyMutex10);
 
 	// Create D2D factory///////////////////////////////////////////////////////////////////////////////////////////////////
 	ID2D1Factory *d2dFactory; 
-	ID2D1RenderTarget * d2dRenderTarget;
 	HR(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,__uuidof(ID2D1Factory),(void**)&d2dFactory));
 
 	D2D1_RENDER_TARGET_PROPERTIES renderTargetProperties;
@@ -286,12 +298,10 @@ void D2D_init(IDXGIAdapter1 *Adapter)
 	sharedSurface->Release();
 	d2dFactory->Release();	
 
-	ID2D1SolidColorBrush *Brush;
 	HR(d2dRenderTarget->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 0.0f, 1.0f), &Brush));
 
 	//DirectWrite///////////////////////////////////////////////////////////////////////////////////////////////////////////
 	IDWriteFactory *writeFactory;
-	IDWriteTextFormat *textFormat;
 	HR(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),reinterpret_cast<IUnknown**>(&writeFactory)));
 
 	HR(writeFactory->CreateTextFormat(
@@ -311,92 +321,11 @@ void D2D_init(IDXGIAdapter1 *Adapter)
 	d3d10Device->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_POINTLIST);	
 }
 
-//Vertex vertex[] = 
-//{
-//	{XMFLOAT3(-0.5,0.5,-0.5),XMFLOAT4(1.0,1.0,1.0,1.0)},
-//	{XMFLOAT3(0.5,0.5,-0.5),XMFLOAT4(1.0,1.0,0.0,1.0)},
-//	{XMFLOAT3(-0.5,-0.5,-0.5),XMFLOAT4(1.0,0.0,1.0,1.0)},
-//	{XMFLOAT3(0.5,-0.5,-0.5),XMFLOAT4(1.0,0.0,0.0,1.0)},
-//	{XMFLOAT3(-0.5,0.5,0.5),XMFLOAT4(0.0,1.0,1.0,1.0)},
-//	{XMFLOAT3(0.5,0.5,0.5),XMFLOAT4(0.0,1.0,0.0,1.0)},
-//	{XMFLOAT3(-0.5,-0.5,0.5),XMFLOAT4(0.0,0.0,1.0,1.0)},
-//	{XMFLOAT3(0.5,-0.5,0.5),XMFLOAT4(0.0,0.0,0.0,1.0)},
-//};
-Vertex vertex[] = 
-{
-	{cubeVertex0,leftUp},
-	{cubeVertex1,rightUp},
-	{cubeVertex2,leftDown},
-	{cubeVertex3,rightDown},
-	
-	{cubeVertex4,leftUp},
-	{cubeVertex0,rightUp},
-	{cubeVertex6,leftDown},
-	{cubeVertex2,rightDown},
-	
-	{cubeVertex4,leftUp},
-	{cubeVertex5,rightUp},
-	{cubeVertex0,leftDown},
-	{cubeVertex1,rightDown},
-	
-	{cubeVertex1,leftUp},
-	{cubeVertex5,rightUp},
-	{cubeVertex3,leftDown},
-	{cubeVertex7,rightDown},
-	
-	{cubeVertex7,leftUp},
-	{cubeVertex6,rightUp},
-	{cubeVertex3,leftDown},
-	{cubeVertex2,rightDown},
-	
-	{cubeVertex5,leftUp},
-	{cubeVertex4,rightUp},
-	{cubeVertex7,leftDown},
-	{cubeVertex6,rightDown},
-};
-//DWORD index[] = 
-//{
-//	0,1,2,
-//	2,1,3,
-//	4,5,0,
-//	0,5,1,
-//	4,0,6,
-//	6,0,2,
-//	1,5,3,
-//	3,5,7,
-//	7,6,3,
-//	3,6,2,
-//	5,4,7,
-//	7,4,6,
-//};
-DWORD index[] = 
-{
-	0,1,2,
-	2,1,3,
-
-	4,5,6,
-	6,5,7,
-	
-	8,9,10,
-	10,9,11,
-	
-	12,13,14,
-	14,13,15,
-	
-	16,17,18,
-	18,17,19,
-	
-	20,21,22,
-	22,21,23,
-};
-
 bool RenderPipeline()
 {
 	HRESULT hr;
 	ID3D11VertexShader* VS;
 	ID3D11PixelShader* PS;
-	ID3D10Blob* VS_Buffer;
-	ID3D10Blob* PS_Buffer;
 
 //创建着色器（顶点着色器和像素着色器）
 	hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "VS", "vs_4_0", 0, 0, 0, &VS_Buffer, 0, 0);
@@ -413,9 +342,86 @@ bool RenderPipeline()
 	d3dDeviceContext->PSSetShader(PS,0,0);
 
 //输入汇编器阶段(IA)
+
+	//Vertex vertex[] = 
+	//{
+	//	{XMFLOAT3(-0.5,0.5,-0.5),XMFLOAT4(1.0,1.0,1.0,1.0)},
+	//	{XMFLOAT3(0.5,0.5,-0.5),XMFLOAT4(1.0,1.0,0.0,1.0)},
+	//	{XMFLOAT3(-0.5,-0.5,-0.5),XMFLOAT4(1.0,0.0,1.0,1.0)},
+	//	{XMFLOAT3(0.5,-0.5,-0.5),XMFLOAT4(1.0,0.0,0.0,1.0)},
+	//	{XMFLOAT3(-0.5,0.5,0.5),XMFLOAT4(0.0,1.0,1.0,1.0)},
+	//	{XMFLOAT3(0.5,0.5,0.5),XMFLOAT4(0.0,1.0,0.0,1.0)},
+	//	{XMFLOAT3(-0.5,-0.5,0.5),XMFLOAT4(0.0,0.0,1.0,1.0)},
+	//	{XMFLOAT3(0.5,-0.5,0.5),XMFLOAT4(0.0,0.0,0.0,1.0)},
+	//};
+	Vertex vertex[] = 
+	{
+		{cubeVertex0,leftUp},
+		{cubeVertex1,rightUp},
+		{cubeVertex2,leftDown},
+		{cubeVertex3,rightDown},
 	
-	ID3D11Buffer* triangleVertBuffer;
-	ID3D11Buffer* triangleIndexBuffer;
+		{cubeVertex4,leftUp},
+		{cubeVertex0,rightUp},
+		{cubeVertex6,leftDown},
+		{cubeVertex2,rightDown},
+	
+		{cubeVertex4,leftUp},
+		{cubeVertex5,rightUp},
+		{cubeVertex0,leftDown},
+		{cubeVertex1,rightDown},
+	
+		{cubeVertex1,leftUp},
+		{cubeVertex5,rightUp},
+		{cubeVertex3,leftDown},
+		{cubeVertex7,rightDown},
+	
+		{cubeVertex7,leftUp},
+		{cubeVertex6,rightUp},
+		{cubeVertex3,leftDown},
+		{cubeVertex2,rightDown},
+	
+		{cubeVertex5,leftUp},
+		{cubeVertex4,rightUp},
+		{cubeVertex7,leftDown},
+		{cubeVertex6,rightDown},
+	};
+	//DWORD index[] = 
+	//{
+	//	0,1,2,
+	//	2,1,3,
+	//	4,5,0,
+	//	0,5,1,
+	//	4,0,6,
+	//	6,0,2,
+	//	1,5,3,
+	//	3,5,7,
+	//	7,6,3,
+	//	3,6,2,
+	//	5,4,7,
+	//	7,4,6,
+	//};
+	DWORD index[] = 
+	{
+		0,1,2,
+		2,1,3,
+
+		4,5,6,
+		6,5,7,
+	
+		8,9,10,
+		10,9,11,
+	
+		12,13,14,
+		14,13,15,
+	
+		16,17,18,
+		18,17,19,
+	
+		20,21,22,
+		22,21,23,
+	};
+	
 	ID3D11InputLayout *inputLayout;
 
 	D3D11_INPUT_ELEMENT_DESC verDesc[2] = {
@@ -441,7 +447,7 @@ bool RenderPipeline()
 	vertexData.SysMemPitch = 0;
 	vertexData.SysMemSlicePitch = 0;
 
-	hr = d3dDevice->CreateBuffer(&vertexBufferDesc,&vertexData,&triangleVertBuffer);
+	hr = d3dDevice->CreateBuffer(&vertexBufferDesc,&vertexData,&squareVertBuffer);
 	HR(hr);
 
 	D3D11_BUFFER_DESC indexBufferDesc;
@@ -458,13 +464,13 @@ bool RenderPipeline()
 	indexData.SysMemPitch = 0;
 	indexData.SysMemSlicePitch = 0;
 
-	hr = d3dDevice->CreateBuffer(&indexBufferDesc,&indexData,&triangleIndexBuffer);
+	hr = d3dDevice->CreateBuffer(&indexBufferDesc,&indexData,&squareIndexBuffer);
 	HR(hr);
 
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
-	d3dDeviceContext->IASetVertexBuffers(0,1,&triangleVertBuffer,&stride,&offset);
-	d3dDeviceContext->IASetIndexBuffer(triangleIndexBuffer,DXGI_FORMAT_R32_UINT,0);
+	d3dDeviceContext->IASetVertexBuffers(0,1,&squareVertBuffer,&stride,&offset);
+	d3dDeviceContext->IASetIndexBuffer(squareIndexBuffer,DXGI_FORMAT_R32_UINT,0);
 
 	hr = d3dDevice->CreateInputLayout(verDesc,ARRAYSIZE(verDesc),VS_Buffer->GetBufferPointer(),VS_Buffer->GetBufferSize(),&inputLayout);
 	HR(hr);
@@ -554,7 +560,78 @@ bool RenderPipeline()
 	d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
 	d3dDeviceContext->OMSetBlendState(blendState,blendFactor,0xffffffff);
 
+	IAInitText();
+
 	return true;
+}
+void IAInitText()
+{
+	Vertex textVertex[] = 
+	{
+		{XMFLOAT3(-1.0,1.0,-1.0),leftUp},
+		{XMFLOAT3(1.0,1.0,-1.0),rightUp},
+		{XMFLOAT3(-1.0,-1.0,-1.0),leftDown},
+		{XMFLOAT3(1.0,-1.0,-1.0),rightDown},
+	};
+	DWORD textIndex[] = 
+	{
+		0,1,2,
+		2,1,3,
+	};
+
+	D3D11_INPUT_ELEMENT_DESC verDesc[2] = {
+		{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0},
+		{"TEXTURE",0,DXGI_FORMAT_R32G32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0}
+	};
+
+	//D3D11_INPUT_ELEMENT_DESC verDesc[1] = {
+	//	{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0}
+	//};
+
+	D3D11_BUFFER_DESC vertexBufferDesc;
+	D3D11_SUBRESOURCE_DATA vertexData;
+
+	vertexBufferDesc.ByteWidth = sizeof(textVertex);
+	vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	vertexBufferDesc.CPUAccessFlags = 0;
+	vertexBufferDesc.MiscFlags = 0;
+	vertexBufferDesc.StructureByteStride = 0;
+
+	vertexData.pSysMem = textVertex;
+	vertexData.SysMemPitch = 0;
+	vertexData.SysMemSlicePitch = 0;
+
+	HR(d3dDevice->CreateBuffer(&vertexBufferDesc,&vertexData,&textVertBuffer));
+
+	D3D11_BUFFER_DESC indexBufferDesc;
+	D3D11_SUBRESOURCE_DATA indexData;
+
+	indexBufferDesc.ByteWidth = sizeof(DWORD) * 6;
+	indexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	indexBufferDesc.CPUAccessFlags = 0;
+	indexBufferDesc.MiscFlags = 0;
+	indexBufferDesc.StructureByteStride = 0;
+
+	indexData.pSysMem = textIndex;
+	indexData.SysMemPitch = 0;
+	indexData.SysMemSlicePitch = 0;
+
+	HR(d3dDevice->CreateBuffer(&indexBufferDesc,&indexData,&textIndexBuffer));
+
+	//UINT stride = sizeof(Vertex);
+	//UINT offset = 0;
+	//d3dDeviceContext->IASetVertexBuffers(0,1,&squareVertBuffer,&stride,&offset);
+	//d3dDeviceContext->IASetIndexBuffer(squareIndexBuffer,DXGI_FORMAT_R32_UINT,0);
+	
+	//ID3D11InputLayout *inputLayout;
+	//HR(d3dDevice->CreateInputLayout(verDesc,ARRAYSIZE(verDesc),VS_Buffer->GetBufferPointer(),VS_Buffer->GetBufferSize(),&inputLayout));
+
+	//d3dDeviceContext->IASetInputLayout(inputLayout);
+	
+	//d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	d3dDevice->CreateShaderResourceView(myTestTexture,NULL,&textResourceView);
 }
 
 int CALLBACK WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine,int nCmdShow)
@@ -590,16 +667,90 @@ void UpdateScene()
 	//if(rot1 > 12.76f)rot1 = 0.1f;
 	//eyePos.f[0]=eyePos.f[2]=-rot1;
 
-	rot2 += .0002f;
+	rot2 += .002f;
 	if(rot2 > 3.1415 * 2) rot2 = 0.0f;
 
+}
+void drawText(const wchar_t * text)
+{
+	//Release the D3D 11 Device
+	keyMutex11->ReleaseSync(0);
+
+	//Use D3D10.1 device
+	keyMutex10->AcquireSync(0, 5);			
+
+	//Draw D2D content		
+	d2dRenderTarget->BeginDraw();	
+
+	//Clear D2D Background
+	d2dRenderTarget->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
+
+	//Create our string
+	//std::wostringstream printString; 
+	//printString << text;
+	//printText = printString.str();
+
+	//Set the Font Color
+	//D2D1_COLOR_F FontColor = 
+
+	//Set the brush color D2D will use to draw with
+	Brush->SetColor(D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f));	
+
+	//Create the D2D Render Area
+	D2D1_RECT_F layoutRect = D2D1::RectF(0, 0, WIDTH, HEIGHT);
+
+	//Draw the Text
+	//d2dRenderTarget->DrawText(
+	//	printText.c_str(),
+	//	wcslen(printText.c_str()),
+	//	TextFormat,
+	//	layoutRect,
+	//	Brush
+	//	);
+	d2dRenderTarget->DrawText(
+	text,
+	wcslen(text),
+	textFormat,
+	layoutRect,
+	Brush
+	);
+
+	d2dRenderTarget->EndDraw();
+
+	//Release the D3D10.1 Device
+	keyMutex10->ReleaseSync(1);
+
+	//Use the D3D11 Device
+	keyMutex11->AcquireSync(1, 5);
+
+	//Use the shader resource representing the direct2d render target
+	//to texture a square which is rendered in screen space so it
+	//overlays on top of our entire scene. We use alpha blending so
+	//that the entire background of the D2D render target is "invisible",
+	//And only the stuff we draw with D2D will be visible (the text)
+
+	//Set the blend state for D2D render target texture objects
+	//d3d11DevCon->OMSetBlendState(Transparency, NULL, 0xffffffff);
+	UINT stride = sizeof(Vertex);
+	UINT offset = 0;
+	d3dDeviceContext->IASetVertexBuffers(0,1,&textVertBuffer,&stride,&offset);
+	d3dDeviceContext->IASetIndexBuffer(textIndexBuffer,DXGI_FORMAT_R32_UINT,0);
+	constBufferStruct.WVP = XMMatrixTranspose(XMMatrixIdentity());
+	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
+	d3dDeviceContext->PSSetShaderResources(0,1,&textResourceView);
+	d3dDeviceContext->DrawIndexed(6,0,0);
 }
 void DrawScene()
 {
 	d3dDeviceContext->ClearRenderTargetView(renderTargetView,colorRGBA);
 	d3dDeviceContext->ClearDepthStencilView(depthStencilView,D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
+	
+	UINT stride = sizeof(Vertex);
+	UINT offset = 0;
+	d3dDeviceContext->IASetVertexBuffers(0,1,&squareVertBuffer,&stride,&offset);
+	d3dDeviceContext->IASetIndexBuffer(squareIndexBuffer,DXGI_FORMAT_R32_UINT,0);
+	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView);
 
-	//XMMATRIX ractangle_1 = XMMatrixTranslation(2.0f,0.0f,2.0f);
 	XMMATRIX ractangle_1 = XMMatrixRotationAxis(XMVectorSet(0,1,0,0),rot2) * XMMatrixTranslation(2,0,0);
 	viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
 	
@@ -622,6 +773,8 @@ void DrawScene()
 	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * viewSpace * positionMatrix);
 	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
+
+	drawText(L"aaaaaaaaaaaaaaaaaa");
 
 	d3dSwapChain->Present(0,0);
 }
