@@ -27,6 +27,8 @@
 
 #define WIDTH 100
 #define HEIGHT 100 
+#define POS_X 1200 
+#define POS_Y 700 
 
 #if defined(DEBUG) | defined(_DEBUG)
     #ifndef HR
@@ -62,6 +64,12 @@ struct ConstBufferStruct
 {
 	XMMATRIX WVP;
 };
+
+//int timetest()
+//{
+//	LARGE_INTEGER
+//	QueryPerformanceCounter
+//}
 
 HWND hwnd;
 IDXGISwapChain * d3dSwapChain;
@@ -179,7 +187,7 @@ void WindowInit(HINSTANCE hInstance)
 	OutputDebugString(L"1");
 
 	RegisterClass(&wc);
-	hwnd = CreateWindow(ClassName,TEXT("windowsnametest"),WS_OVERLAPPEDWINDOW,1200,700,WIDTH,HEIGHT,NULL,NULL,hInstance,NULL);
+	hwnd = CreateWindow(ClassName,TEXT("windowsnametest"),WS_OVERLAPPEDWINDOW,POS_X,POS_Y,WIDTH,HEIGHT,NULL,NULL,hInstance,NULL);
 	if(!hwnd)
 	{
 		MessageBox(NULL,TEXT("创建窗口失败！"),TEXT("提示"),MB_OK);
@@ -319,6 +327,7 @@ void D2D_init(IDXGIAdapter1 *Adapter)
 	HR(textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR));
 
 	d3d10Device->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_POINTLIST);	
+	d3dDevice->CreateShaderResourceView(myTestTexture,NULL,&textResourceView);
 }
 
 bool RenderPipeline()
@@ -619,19 +628,6 @@ void IAInitText()
 	indexData.SysMemSlicePitch = 0;
 
 	HR(d3dDevice->CreateBuffer(&indexBufferDesc,&indexData,&textIndexBuffer));
-
-	//UINT stride = sizeof(Vertex);
-	//UINT offset = 0;
-	//d3dDeviceContext->IASetVertexBuffers(0,1,&squareVertBuffer,&stride,&offset);
-	//d3dDeviceContext->IASetIndexBuffer(squareIndexBuffer,DXGI_FORMAT_R32_UINT,0);
-	
-	//ID3D11InputLayout *inputLayout;
-	//HR(d3dDevice->CreateInputLayout(verDesc,ARRAYSIZE(verDesc),VS_Buffer->GetBufferPointer(),VS_Buffer->GetBufferSize(),&inputLayout));
-
-	//d3dDeviceContext->IASetInputLayout(inputLayout);
-	
-	//d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	d3dDevice->CreateShaderResourceView(myTestTexture,NULL,&textResourceView);
 }
 
 int CALLBACK WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine,int nCmdShow)
@@ -685,33 +681,15 @@ void drawText(const wchar_t * text)
 	//Clear D2D Background
 	d2dRenderTarget->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
 
-	//Create our string
-	//std::wostringstream printString; 
-	//printString << text;
-	//printText = printString.str();
-
-	//Set the Font Color
-	//D2D1_COLOR_F FontColor = 
-
 	//Set the brush color D2D will use to draw with
 	Brush->SetColor(D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f));	
 
-	//Create the D2D Render Area
-	D2D1_RECT_F layoutRect = D2D1::RectF(0, 0, WIDTH, HEIGHT);
-
 	//Draw the Text
-	//d2dRenderTarget->DrawText(
-	//	printText.c_str(),
-	//	wcslen(printText.c_str()),
-	//	TextFormat,
-	//	layoutRect,
-	//	Brush
-	//	);
 	d2dRenderTarget->DrawText(
 	text,
 	wcslen(text),
 	textFormat,
-	layoutRect,
+	D2D1::RectF(0, 0, WIDTH, HEIGHT),
 	Brush
 	);
 
@@ -774,7 +752,14 @@ void DrawScene()
 	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
 
-	drawText(L"aaaaaaaaaaaaaaaaaa");
+	LARGE_INTEGER ft;
+	//QueryPerformanceFrequency(&ft);
+	QueryPerformanceCounter(&ft);
+
+	wchar_t timeTemp[120];
+	swprintf(timeTemp,L"%Ld",ft.QuadPart);
+
+	drawText(timeTemp);
 
 	d3dSwapChain->Present(0,0);
 }
