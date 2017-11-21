@@ -28,7 +28,7 @@
 #define WIDTH 100
 #define HEIGHT 100 
 #define POS_X 1200 
-#define POS_Y 700 
+#define POS_Y 700
 
 #if defined(DEBUG) | defined(_DEBUG)
     #ifndef HR
@@ -64,12 +64,6 @@ struct ConstBufferStruct
 {
 	XMMATRIX WVP;
 };
-
-//int timetest()
-//{
-//	LARGE_INTEGER
-//	QueryPerformanceCounter
-//}
 
 HWND hwnd;
 IDXGISwapChain * d3dSwapChain;
@@ -109,6 +103,13 @@ ID3D11Buffer* textIndexBuffer;
 IDXGIKeyedMutex * keyMutex11;
 IDXGIKeyedMutex * keyMutex10;
 
+//time
+double timeFrequency = 0.0;	//count
+double startTime = 0.0;	//count
+double lastTime = 0.0;	//time
+int frameCount = 0;
+int fps = 0;
+
 //FLOAT colorRGBA[4] = {0.0,1.0,0.0,1.0};	//´¿ÂÌ
 FLOAT colorRGBA[4] = {0.0,0.0,0.0,1.0};	//´¿ºÚ
 FLOAT rot1 = 0.0f;
@@ -131,7 +132,7 @@ XMFLOAT2 rightDown = XMFLOAT2(CONTEXT_PIC_NUM,CONTEXT_PIC_NUM);
 void D2D_init(IDXGIAdapter1 *Adapter);
 void IAInitText();
 
-void UpdateScene();
+void UpdateScene(double currentFrameTime);
 void DrawScene();
 
 LRESULT CALLBACK WinProc(HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam)
@@ -151,6 +152,30 @@ LRESULT CALLBACK WinProc(HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam)
 	}
 }
 
+void startTimer()
+{
+	LARGE_INTEGER ft,ct;
+	QueryPerformanceFrequency(&ft);
+	QueryPerformanceCounter(&ct);
+	timeFrequency = (double)ft.QuadPart;
+	startTime = (double)ct.QuadPart;
+}
+double getTime()
+{
+	LARGE_INTEGER ct;
+	QueryPerformanceCounter(&ct);
+	return ((double)ct.QuadPart - startTime)/timeFrequency;
+}
+double getFrameTime()
+{
+	double ct,currentFrameTime;
+	ct = getTime();
+	currentFrameTime =  ct - lastTime;
+	if(currentFrameTime < 0.0)currentFrameTime = 0.0;
+	lastTime = ct;
+	return currentFrameTime;
+}
+
 void messageLoop()
 {
 	MSG msg;
@@ -164,7 +189,14 @@ void messageLoop()
 		}
 		else
 		{
-			UpdateScene();
+			frameCount++;
+			if(getTime() > 1.0f)
+			{
+				fps = frameCount;
+				frameCount = 0;
+				startTimer();
+			}
+			UpdateScene(getFrameTime());
 			DrawScene();
 		}
 	}
@@ -318,7 +350,7 @@ void D2D_init(IDXGIAdapter1 *Adapter)
 		DWRITE_FONT_WEIGHT_REGULAR,
 		DWRITE_FONT_STYLE_NORMAL,
 		DWRITE_FONT_STRETCH_NORMAL,
-		24.0f,
+		20.0f,
 		L"en-us",
 		&textFormat
 		));
@@ -637,12 +669,11 @@ int CALLBACK WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine
 	DirectxInit();
 	
 	RenderPipeline();
-
 	messageLoop();
 	return 0;
 }
 
-void UpdateScene()
+void UpdateScene(double currentFrameTime)
 {
 //°×ÂÌ½¥±ä
 	//static bool colorDirection = true;
@@ -663,7 +694,8 @@ void UpdateScene()
 	//if(rot1 > 12.76f)rot1 = 0.1f;
 	//eyePos.f[0]=eyePos.f[2]=-rot1;
 
-	rot2 += .002f;
+	//rot2 += .002;
+	rot2 += (double)currentFrameTime * 3.1415;
 	if(rot2 > 3.1415 * 2) rot2 = 0.0f;
 
 }
@@ -752,12 +784,9 @@ void DrawScene()
 	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
 
-	LARGE_INTEGER ft;
-	//QueryPerformanceFrequency(&ft);
-	QueryPerformanceCounter(&ft);
 
 	wchar_t timeTemp[120];
-	swprintf(timeTemp,L"%Ld",ft.QuadPart);
+	swprintf(timeTemp,L"%d",fps);
 
 	drawText(timeTemp);
 
