@@ -30,6 +30,9 @@
 #define POS_X 1200 
 #define POS_Y 700
 
+//#define LIGHT_TYPE_VERTEX_NORMAL
+#define LIGHT_TYPE_PLANE_NORMAL
+
 #if defined(DEBUG) | defined(_DEBUG)
     #ifndef HR
     #define HR(x)                                                 \
@@ -59,10 +62,23 @@ struct Vertex
 {
 	XMFLOAT3 position;
 	XMFLOAT2 textureCoordinate;
+	XMFLOAT3 normal;
 };
-struct ConstBufferStruct
+struct ConstSpace
 {
 	XMMATRIX WVP;
+	XMMATRIX worldSpace;
+};
+struct Light
+{
+	XMFLOAT3 dir;
+	float pad;
+	XMFLOAT4 ambientIntensity;
+	XMFLOAT4 diffuseIntensity;
+};
+struct ConstLight
+{
+	Light light;
 };
 
 HWND hwnd;
@@ -79,13 +95,17 @@ ID3D11Buffer* squareIndexBuffer;
 XMMATRIX worldSpace;
 XMMATRIX viewSpace;
 XMMATRIX positionMatrix;
-ID3D11Buffer *constBuffer;
-ConstBufferStruct constBufferStruct;
+ID3D11Buffer *constBufferSpace;
+ID3D11Buffer *constBufferLight;
+ConstSpace constSpace;
+ConstLight constLight;
 ID3D11ShaderResourceView * shaderResourceView;
 ID3D11SamplerState * samplerState;
 ID3D11BlendState * blendState;
 ID3D10Blob* VS_Buffer;
 ID3D10Blob* PS_Buffer;
+ID3D11VertexShader* VS;
+ID3D11PixelShader* PS;
 //XMVECTORF32 eyePos = {-0.1f,0.0f,-0.1f,0.0f};
 XMVECTORF32 eyePos = {-1.0f,1.0f,-1.0f,0.0f};
 XMVECTORF32 focusPos = {0.0f,0.0f,0.0f,0.0f};
@@ -94,6 +114,8 @@ XMVECTORF32 upPos = {0.0f,1.0f,0.0f,0.0f};
 //textD2D
 ID3D10Device1 * d3d10Device;
 ID3D11Texture2D *myTestTexture;
+ID3D10Blob* D2D_PS_Buffer;
+ID3D11PixelShader* D2D_PS;
 ID3D11ShaderResourceView * textResourceView;
 ID2D1RenderTarget * d2dRenderTarget;
 IDWriteTextFormat *textFormat;
@@ -365,8 +387,6 @@ void D2D_init(IDXGIAdapter1 *Adapter)
 bool RenderPipeline()
 {
 	HRESULT hr;
-	ID3D11VertexShader* VS;
-	ID3D11PixelShader* PS;
 
 //创建着色器（顶点着色器和像素着色器）
 	hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "VS", "vs_4_0", 0, 0, 0, &VS_Buffer, 0, 0);
@@ -380,7 +400,6 @@ bool RenderPipeline()
 	HR(hr);
 	
 	d3dDeviceContext->VSSetShader(VS,0,0);
-	d3dDeviceContext->PSSetShader(PS,0,0);
 
 //输入汇编器阶段(IA)
 
@@ -397,35 +416,70 @@ bool RenderPipeline()
 	//};
 	Vertex vertex[] = 
 	{
-		{cubeVertex0,leftUp},
-		{cubeVertex1,rightUp},
-		{cubeVertex2,leftDown},
-		{cubeVertex3,rightDown},
+#ifdef LIGHT_TYPE_VERTEX_NORMAL
+	//顶点法向量
+		{cubeVertex0,leftUp,cubeVertex0},
+		{cubeVertex1,rightUp,cubeVertex1},
+		{cubeVertex2,leftDown,cubeVertex2},
+		{cubeVertex3,rightDown,cubeVertex3},
 	
-		{cubeVertex4,leftUp},
-		{cubeVertex0,rightUp},
-		{cubeVertex6,leftDown},
-		{cubeVertex2,rightDown},
+		{cubeVertex4,leftUp,cubeVertex4},
+		{cubeVertex0,rightUp,cubeVertex0},
+		{cubeVertex6,leftDown,cubeVertex6},
+		{cubeVertex2,rightDown,cubeVertex2},
 	
-		{cubeVertex4,leftUp},
-		{cubeVertex5,rightUp},
-		{cubeVertex0,leftDown},
-		{cubeVertex1,rightDown},
+		{cubeVertex4,leftUp,cubeVertex4},
+		{cubeVertex5,rightUp,cubeVertex5},
+		{cubeVertex0,leftDown,cubeVertex0},
+		{cubeVertex1,rightDown,cubeVertex1},
 	
-		{cubeVertex1,leftUp},
-		{cubeVertex5,rightUp},
-		{cubeVertex3,leftDown},
-		{cubeVertex7,rightDown},
+		{cubeVertex1,leftUp,cubeVertex1},
+		{cubeVertex5,rightUp,cubeVertex5},
+		{cubeVertex3,leftDown,cubeVertex3},
+		{cubeVertex7,rightDown,cubeVertex7},
 	
-		{cubeVertex7,leftUp},
-		{cubeVertex6,rightUp},
-		{cubeVertex3,leftDown},
-		{cubeVertex2,rightDown},
+		{cubeVertex7,leftUp,cubeVertex7},
+		{cubeVertex6,rightUp,cubeVertex6},
+		{cubeVertex3,leftDown,cubeVertex3},
+		{cubeVertex2,rightDown,cubeVertex2},
 	
-		{cubeVertex5,leftUp},
-		{cubeVertex4,rightUp},
-		{cubeVertex7,leftDown},
-		{cubeVertex6,rightDown},
+		{cubeVertex5,leftUp,cubeVertex5},
+		{cubeVertex4,rightUp,cubeVertex4},
+		{cubeVertex7,leftDown,cubeVertex7},
+		{cubeVertex6,rightDown,cubeVertex6},
+#endif
+#ifdef LIGHT_TYPE_PLANE_NORMAL
+	//平面法向量
+		{cubeVertex0,leftUp,XMFLOAT3(0.0f,0.0f,-1.0f)},
+		{cubeVertex1,rightUp,XMFLOAT3(0.0f,0.0f,-1.0f)},
+		{cubeVertex2,leftDown,XMFLOAT3(0.0f,0.0f,-1.0f)},
+		{cubeVertex3,rightDown,XMFLOAT3(0.0f,0.0f,-1.0f)},
+	
+		{cubeVertex4,leftUp,XMFLOAT3(-1.0f,0.0f,0.0f)},
+		{cubeVertex0,rightUp,XMFLOAT3(-1.0f,0.0f,0.0f)},
+		{cubeVertex6,leftDown,XMFLOAT3(-1.0f,0.0f,0.0f)},
+		{cubeVertex2,rightDown,XMFLOAT3(-1.0f,0.0f,0.0f)},
+	
+		{cubeVertex4,leftUp,XMFLOAT3(0.0f,1.0f,0.0f)},
+		{cubeVertex5,rightUp,XMFLOAT3(0.0f,1.0f,0.0f)},
+		{cubeVertex0,leftDown,XMFLOAT3(0.0f,1.0f,0.0f)},
+		{cubeVertex1,rightDown,XMFLOAT3(0.0f,1.0f,0.0f)},
+	
+		{cubeVertex1,leftUp,XMFLOAT3(1.0f,0.0f,0.0f)},
+		{cubeVertex5,rightUp,XMFLOAT3(1.0f,0.0f,0.0f)},
+		{cubeVertex3,leftDown,XMFLOAT3(1.0f,0.0f,0.0f)},
+		{cubeVertex7,rightDown,XMFLOAT3(1.0f,0.0f,0.0f)},
+	
+		{cubeVertex7,leftUp,XMFLOAT3(0.0f,-1.0f,0.0f)},
+		{cubeVertex6,rightUp,XMFLOAT3(0.0f,-1.0f,0.0f)},
+		{cubeVertex3,leftDown,XMFLOAT3(0.0f,-1.0f,0.0f)},
+		{cubeVertex2,rightDown,XMFLOAT3(0.0f,-1.0f,0.0f)},
+	
+		{cubeVertex5,leftUp,XMFLOAT3(0.0f,0.0f,1.0f)},
+		{cubeVertex4,rightUp,XMFLOAT3(0.0f,0.0f,1.0f)},
+		{cubeVertex7,leftDown,XMFLOAT3(0.0f,0.0f,1.0f)},
+		{cubeVertex6,rightDown,XMFLOAT3(0.0f,0.0f,1.0f)},
+#endif
 	};
 	//DWORD index[] = 
 	//{
@@ -465,9 +519,10 @@ bool RenderPipeline()
 	
 	ID3D11InputLayout *inputLayout;
 
-	D3D11_INPUT_ELEMENT_DESC verDesc[2] = {
+	D3D11_INPUT_ELEMENT_DESC verDesc[3] = {
 		{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0},
-		{"TEXTURE",0,DXGI_FORMAT_R32G32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0}
+		{"TEXTURE",0,DXGI_FORMAT_R32G32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0},
+		{"NORMAL",0,DXGI_FORMAT_R32G32B32_FLOAT,0,20,D3D11_INPUT_PER_VERTEX_DATA,0}
 	};
 
 	//D3D11_INPUT_ELEMENT_DESC verDesc[1] = {
@@ -544,20 +599,31 @@ bool RenderPipeline()
 	d3dDevice->CreateRasterizerState(&rasterStateDesc,&rasterState_2);
 	//d3dDeviceContext->RSSetState(rasterState_1);
 
-//常量缓存部分
+//常量缓存部分（空间变换和光照）
 	D3D11_BUFFER_DESC constBufferDesc;
 
-	constBufferDesc.ByteWidth = sizeof(ConstBufferStruct);
+	constBufferDesc.ByteWidth = sizeof(ConstSpace);
 	constBufferDesc.Usage = D3D11_USAGE_DEFAULT;
 	constBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 	constBufferDesc.CPUAccessFlags = 0;
 	constBufferDesc.MiscFlags = 0;
 	constBufferDesc.StructureByteStride = 0;
-	d3dDevice->CreateBuffer(&constBufferDesc,NULL,&constBuffer);
-	d3dDeviceContext->VSSetConstantBuffers(0,1,&constBuffer);
+	d3dDevice->CreateBuffer(&constBufferDesc,NULL,&constBufferSpace);
+	d3dDeviceContext->VSSetConstantBuffers(0,1,&constBufferSpace);
 
 	worldSpace = XMMatrixIdentity();
 	positionMatrix =  XMMatrixPerspectiveFovLH(0.4f*3.14f,(float)WIDTH/(float)HEIGHT,1.0f,1000.0f);
+
+	constBufferDesc.ByteWidth = sizeof(ConstLight);
+	d3dDevice->CreateBuffer(&constBufferDesc,NULL,&constBufferLight);
+	d3dDeviceContext->PSSetConstantBuffers(1,1,&constBufferLight);
+
+	constLight.light.pad = 0.0f;
+	constLight.light.ambientIntensity = XMFLOAT4(0.2f,0.2f,0.2f,0.2f);
+	constLight.light.diffuseIntensity = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
+	constLight.light.dir = XMFLOAT3(-5.3f,1.3f,-1.0f);
+
+	d3dDeviceContext->UpdateSubresource(constBufferLight,0,NULL,&constLight,0,0);
 
 //纹理部分
 	HR(D3DX11CreateShaderResourceViewFromFile(d3dDevice,L"braynzar.jpg",NULL,NULL,&shaderResourceView,NULL));
@@ -597,9 +663,6 @@ bool RenderPipeline()
 
 	d3dDevice->CreateBlendState(&blendDesc,&blendState);
 	
-	float blendFactor[] = {0.75f, 0.75f, 0.75f, 1.0f};
-	d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
-	d3dDeviceContext->OMSetBlendState(blendState,blendFactor,0xffffffff);
 
 	IAInitText();
 
@@ -660,6 +723,10 @@ void IAInitText()
 	indexData.SysMemSlicePitch = 0;
 
 	HR(d3dDevice->CreateBuffer(&indexBufferDesc,&indexData,&textIndexBuffer));
+
+//D2D像素着色器
+	D3DX11CompileFromFile(L"Effects.fx",NULL,NULL,"D2D_PS","ps_4_0",NULL,NULL,NULL,&D2D_PS_Buffer,NULL,NULL);
+	d3dDevice->CreatePixelShader(D2D_PS_Buffer->GetBufferPointer(),D2D_PS_Buffer->GetBufferSize(),NULL,&D2D_PS);
 }
 
 int CALLBACK WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine,int nCmdShow)
@@ -743,11 +810,15 @@ void drawText(const wchar_t * text)
 	//d3d11DevCon->OMSetBlendState(Transparency, NULL, 0xffffffff);
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
+	float blendFactor[] = {0.75f, 0.75f, 0.75f, 1.0f};
 	d3dDeviceContext->IASetVertexBuffers(0,1,&textVertBuffer,&stride,&offset);
 	d3dDeviceContext->IASetIndexBuffer(textIndexBuffer,DXGI_FORMAT_R32_UINT,0);
-	constBufferStruct.WVP = XMMatrixTranspose(XMMatrixIdentity());
-	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
+	constSpace.WVP = XMMatrixTranspose(XMMatrixIdentity());
+	constSpace.worldSpace = constSpace.WVP;
+	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->PSSetShaderResources(0,1,&textResourceView);
+	d3dDeviceContext->PSSetShader(D2D_PS,0,0);
+	d3dDeviceContext->OMSetBlendState(blendState,blendFactor,0xffffffff);
 	d3dDeviceContext->DrawIndexed(6,0,0);
 }
 void DrawScene()
@@ -760,28 +831,34 @@ void DrawScene()
 	d3dDeviceContext->IASetVertexBuffers(0,1,&squareVertBuffer,&stride,&offset);
 	d3dDeviceContext->IASetIndexBuffer(squareIndexBuffer,DXGI_FORMAT_R32_UINT,0);
 	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView);
+	d3dDeviceContext->PSSetShader(PS,0,0);
+	d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
 
 	XMMATRIX ractangle_1 = XMMatrixRotationAxis(XMVectorSet(0,1,0,0),rot2) * XMMatrixTranslation(2,0,0);
 	viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
 	
 	d3dDeviceContext->RSSetState(rasterState_2);
-	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * positionMatrix);
-	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
+	constSpace.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * positionMatrix);
+	constSpace.worldSpace = XMMatrixTranspose(worldSpace * ractangle_1);
+	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
 
 	d3dDeviceContext->RSSetState(rasterState_1);
-	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * positionMatrix);
-	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
+	constSpace.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * positionMatrix);
+	constSpace.worldSpace = XMMatrixTranspose(worldSpace * ractangle_1);
+	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
 
 	d3dDeviceContext->RSSetState(rasterState_2);
-	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * viewSpace * positionMatrix);
-	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
+	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * positionMatrix);
+	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
+	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
 	
 	d3dDeviceContext->RSSetState(rasterState_1);
-	constBufferStruct.WVP = XMMatrixTranspose(worldSpace * viewSpace * positionMatrix);
-	d3dDeviceContext->UpdateSubresource(constBuffer,0,NULL,&constBufferStruct,0,0);
+	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * positionMatrix);
+	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
+	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
 
 
