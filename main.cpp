@@ -24,6 +24,9 @@
 #include <sstream>
 #include <dwrite.h>
 ///////////////**************new**************////////////////////
+#ifdef _DEBUG
+#include <comdef.h>
+#endif
 
 #define WIDTH 100
 #define HEIGHT 100 
@@ -256,6 +259,7 @@ void WindowInit(HINSTANCE hInstance)
 void DirectxInit()
 {
 	DXGI_MODE_DESC d3dModeDesc;
+	HRESULT hr;
 	ZeroMemory(&d3dModeDesc, sizeof(DXGI_MODE_DESC));
 	d3dModeDesc.Width = WIDTH;
 	d3dModeDesc.Height = HEIGHT;
@@ -275,14 +279,24 @@ void DirectxInit()
 
 	// Create DXGI factory to enumerate adapters///////////////////////////////////////////////////////////////////////////
 	IDXGIFactory1 *DXGIFactory;
-	HRESULT hr = CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&DXGIFactory);	
-	// Use the first adapter	
+	HR(CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&DXGIFactory));	
+	// Use the first adapter
 	IDXGIAdapter1 *Adapter;
-	hr = DXGIFactory->EnumAdapters1(0, &Adapter);
+	for(int i = 0;DXGIFactory->EnumAdapters1(i, &Adapter) == DXGI_ERROR_NOT_FOUND;i++);
+	//DXGIFactory->EnumAdapters1(4, &Adapter);
 	DXGIFactory->Release();	
 
-	D3D11CreateDeviceAndSwapChain(Adapter,D3D_DRIVER_TYPE_UNKNOWN,NULL,D3D11_CREATE_DEVICE_DEBUG|D3D11_CREATE_DEVICE_BGRA_SUPPORT,NULL,NULL,D3D11_SDK_VERSION,&d3dSwapChainDesc,&d3dSwapChain,&d3dDevice,NULL,&d3dDeviceContext);	//后面试一下把adapter换回NULL会怎么样
-	//D3D11CreateDeviceAndSwapChain(NULL,D3D_DRIVER_TYPE_HARDWARE,NULL,NULL,NULL,NULL,D3D11_SDK_VERSION,&d3dSwapChainDesc,&d3dSwapChain,&d3dDevice,NULL,&d3dDeviceContext);
+	hr = D3D11CreateDeviceAndSwapChain(Adapter,D3D_DRIVER_TYPE_UNKNOWN,NULL,D3D11_CREATE_DEVICE_DEBUG|D3D11_CREATE_DEVICE_BGRA_SUPPORT,NULL,NULL,D3D11_SDK_VERSION,&d3dSwapChainDesc,&d3dSwapChain,&d3dDevice,NULL,&d3dDeviceContext);	//后面试一下把adapter换回NULL会怎么样
+	//hr = D3D11CreateDeviceAndSwapChain(Adapter,D3D_DRIVER_TYPE_UNKNOWN,NULL,D3D11_CREATE_DEVICE_BGRA_SUPPORT,NULL,NULL,D3D11_SDK_VERSION,&d3dSwapChainDesc,&d3dSwapChain,&d3dDevice,NULL,&d3dDeviceContext);	//后面试一下把adapter换回NULL会怎么样
+#ifdef _DEBUG	
+	if(FAILED(hr))
+	{
+		_com_error err(hr);
+		LPCTSTR errMsg = err.ErrorMessage();
+		OutputDebugString(errMsg);
+	}
+#endif
+	//HR(D3D11CreateDeviceAndSwapChain(NULL,D3D_DRIVER_TYPE_HARDWARE,NULL,NULL,NULL,NULL,D3D11_SDK_VERSION,&d3dSwapChainDesc,&d3dSwapChain,&d3dDevice,NULL,&d3dDeviceContext));
 	
 	D2D_init(Adapter);
 	Adapter->Release();
@@ -316,7 +330,16 @@ void DirectxInit()
 
 void D2D_init(IDXGIAdapter1 *Adapter)
 {
-	HR(D3D10CreateDevice1(Adapter,D3D10_DRIVER_TYPE_HARDWARE,NULL,D3D10_CREATE_DEVICE_DEBUG|D3D10_CREATE_DEVICE_BGRA_SUPPORT,D3D10_FEATURE_LEVEL_9_3,D3D10_1_SDK_VERSION,&d3d10Device));
+	HRESULT hr;
+	hr = D3D10CreateDevice1(Adapter,D3D10_DRIVER_TYPE_HARDWARE,NULL,D3D10_CREATE_DEVICE_DEBUG|D3D10_CREATE_DEVICE_BGRA_SUPPORT,D3D10_FEATURE_LEVEL_9_3,D3D10_1_SDK_VERSION,&d3d10Device);
+#ifdef _DEBUG	
+	if(FAILED(hr))
+	{
+		_com_error err(hr);
+		LPCTSTR errMsg = err.ErrorMessage();
+		OutputDebugString(errMsg);
+	}
+#endif
 	D3D11_TEXTURE2D_DESC texture2DDescTemp;
 	IDXGIResource * sharedResource;
 	HANDLE sharedHandle;
