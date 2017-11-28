@@ -2,12 +2,14 @@
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "d3dx11.lib")
 #pragma comment(lib, "d3dx10.lib")
-///////////////**************new**************////////////////////
+///////////////**************d2d_texture**************////////////////////
 #pragma comment (lib, "D3D10_1.lib")
 #pragma comment (lib, "DXGI.lib")
 #pragma comment (lib, "D2D1.lib")
 #pragma comment (lib, "dwrite.lib")
-///////////////**************new**************////////////////////
+///////////////**************dx_input**************////////////////////
+#pragma comment (lib, "dinput8.lib")
+#pragma comment (lib, "dxguid.lib")
 
 #include <Windows.h>
 #include <D3D11.h>
@@ -17,13 +19,15 @@
 #include <xnamath.h>
 #include <exception>
 #include <stdio.h>
-///////////////**************new**************////////////////////
+///////////////**************dx_input**************////////////////////
 #include <D3D10_1.h>
 #include <DXGI.h>
 #include <D2D1.h>
 #include <sstream>
 #include <dwrite.h>
-///////////////**************new**************////////////////////
+///////////////**************dx_input**************////////////////////
+#include <dinput.h>
+
 #ifdef _DEBUG
 #include <comdef.h>
 #endif
@@ -77,11 +81,23 @@ struct Light
 	XMFLOAT3 dir;
 	float pad;
 	XMFLOAT4 ambientIntensity;
-	XMFLOAT4 diffuseIntensity;
+	XMFLOAT4 lightIntensity;
+};
+struct PointLight
+{
+	XMFLOAT3 pos;
+	float pad_1;
+	XMFLOAT4 lightIntensity;
+	XMFLOAT3 attr;
+	float pad_2;
 };
 struct ConstLight
 {
 	Light light;
+};
+struct ConstPointLight
+{
+	PointLight pointLight;
 };
 
 HWND hwnd;
@@ -100,8 +116,10 @@ XMMATRIX viewSpace;
 XMMATRIX positionMatrix;
 ID3D11Buffer *constBufferSpace;
 ID3D11Buffer *constBufferLight;
+ID3D11Buffer *constBufferPointLight;
 ConstSpace constSpace;
 ConstLight constLight;
+ConstPointLight constPointLight;
 ID3D11ShaderResourceView * shaderResourceView;
 ID3D11SamplerState * samplerState;
 ID3D11BlendState * blendState;
@@ -643,10 +661,21 @@ bool RenderPipeline()
 
 	constLight.light.pad = 0.0f;
 	constLight.light.ambientIntensity = XMFLOAT4(0.2f,0.2f,0.2f,0.2f);
-	constLight.light.diffuseIntensity = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
+	constLight.light.lightIntensity = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
 	constLight.light.dir = XMFLOAT3(-5.3f,1.3f,-1.0f);
 
 	d3dDeviceContext->UpdateSubresource(constBufferLight,0,NULL,&constLight,0,0);
+
+	constBufferDesc.ByteWidth = sizeof(ConstPointLight);
+	d3dDevice->CreateBuffer(&constBufferDesc,NULL,&constBufferPointLight);
+	d3dDeviceContext->PSSetConstantBuffers(2,1,&constBufferPointLight);
+
+	constPointLight.pointLight.attr = XMFLOAT3(0.0f,0.5f,0.0f);
+	constPointLight.pointLight.pad_1 = constPointLight.pointLight.pad_2 = 0.0f;
+	constPointLight.pointLight.pos = XMFLOAT3(1.3f,1.2f,-1.0f);
+	constPointLight.pointLight.lightIntensity = XMFLOAT4(0.0f,1.0f,0.0f,1.0f);
+	
+	d3dDeviceContext->UpdateSubresource(constBufferPointLight,0,NULL,&constPointLight,0,0);
 
 //Œ∆¿Ì≤ø∑÷
 	HR(D3DX11CreateShaderResourceViewFromFile(d3dDevice,L"braynzar.jpg",NULL,NULL,&shaderResourceView,NULL));
