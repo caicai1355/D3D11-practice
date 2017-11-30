@@ -58,6 +58,25 @@
 #endifdif
 #endif
 
+#if defined(DEBUG) | defined(_DEBUG)
+	#ifndef HR_DEBUG
+	#define HR_DEBUG(x)								\
+	{												\
+		if(FAILED(x))								\
+		{											\
+			_com_error err(x);						\
+			LPCTSTR errMsg = err.ErrorMessage();	\
+			OutputDebugString(errMsg);				\
+		}											\
+	}
+	#endif
+#else
+	#ifndef HR_DEBUG
+	#define HR_DEBUG(hr) (hr)
+	#endif
+#endif
+//#define HR_DEBUG(hr) (hr)
+
 const TCHAR ClassName[]=TEXT("dx_world");
 
 //struct Vertex
@@ -113,7 +132,7 @@ ID3D11Buffer* squareVertBuffer;
 ID3D11Buffer* squareIndexBuffer;
 XMMATRIX worldSpace;
 XMMATRIX viewSpace;
-XMMATRIX positionMatrix;
+XMMATRIX projectionMatrix;
 ID3D11Buffer *constBufferSpace;
 ID3D11Buffer *constBufferLight;
 ID3D11Buffer *constBufferPointLight;
@@ -129,7 +148,8 @@ ID3D11VertexShader* VS;
 ID3D11PixelShader* PS;
 //XMVECTORF32 eyePos = {-0.1f,0.0f,-0.1f,0.0f};
 XMVECTORF32 eyePos = {-1.0f,1.0f,-1.0f,0.0f};
-XMVECTORF32 focusPos = {0.0f,0.0f,0.0f,0.0f};
+//XMVECTORF32 focusPos = {0.0f,0.0f,0.0f,0.0f};
+XMVECTORF32 focusPos = {0.0f,1.0f,0.0f,0.0f};
 XMVECTORF32 upPos = {0.0f,1.0f,0.0f,0.0f};
 
 //textD2D
@@ -145,6 +165,13 @@ ID3D11Buffer* textVertBuffer;
 ID3D11Buffer* textIndexBuffer;
 IDXGIKeyedMutex * keyMutex11;
 IDXGIKeyedMutex * keyMutex10;
+
+//directInput
+LPDIRECTINPUT8 directInput;
+IDirectInputDevice8 * mouseDevice;
+IDirectInputDevice8 * keyboardDevice;
+FLOAT cameraRotHorizontal = 0.0f;
+FLOAT cameraRotVertical = 0.0f;
 
 //time
 double timeFrequency = 0.0;	//count
@@ -174,6 +201,9 @@ XMFLOAT2 rightDown = XMFLOAT2(CONTEXT_PIC_NUM,CONTEXT_PIC_NUM);
 
 void D2D_init(IDXGIAdapter1 *Adapter);
 void IAInitText();
+
+bool InitDirectInput(HINSTANCE hInstance);
+void DetectInput(double time);
 
 void UpdateScene(double currentFrameTime);
 void DrawScene();
@@ -222,6 +252,7 @@ double getFrameTime()
 void messageLoop()
 {
 	MSG msg;
+	double currentFrameTime;
 	ZeroMemory(&msg,sizeof(MSG));
 	while(msg.message != WM_QUIT)
 	{
@@ -239,7 +270,9 @@ void messageLoop()
 				frameCount = 0;
 				startTimer();
 			}
-			UpdateScene(getFrameTime());
+			currentFrameTime = getFrameTime();
+			DetectInput(currentFrameTime);
+			UpdateScene(currentFrameTime);
 			DrawScene();
 		}
 	}
@@ -306,14 +339,7 @@ void DirectxInit()
 
 	hr = D3D11CreateDeviceAndSwapChain(Adapter,D3D_DRIVER_TYPE_UNKNOWN,NULL,D3D11_CREATE_DEVICE_DEBUG|D3D11_CREATE_DEVICE_BGRA_SUPPORT,NULL,NULL,D3D11_SDK_VERSION,&d3dSwapChainDesc,&d3dSwapChain,&d3dDevice,NULL,&d3dDeviceContext);	//后面试一下把adapter换回NULL会怎么样
 	//hr = D3D11CreateDeviceAndSwapChain(Adapter,D3D_DRIVER_TYPE_UNKNOWN,NULL,D3D11_CREATE_DEVICE_BGRA_SUPPORT,NULL,NULL,D3D11_SDK_VERSION,&d3dSwapChainDesc,&d3dSwapChain,&d3dDevice,NULL,&d3dDeviceContext);	//后面试一下把adapter换回NULL会怎么样
-#ifdef _DEBUG	
-	if(FAILED(hr))
-	{
-		_com_error err(hr);
-		LPCTSTR errMsg = err.ErrorMessage();
-		OutputDebugString(errMsg);
-	}
-#endif
+	HR_DEBUG(hr);
 	//HR(D3D11CreateDeviceAndSwapChain(NULL,D3D_DRIVER_TYPE_HARDWARE,NULL,NULL,NULL,NULL,D3D11_SDK_VERSION,&d3dSwapChainDesc,&d3dSwapChain,&d3dDevice,NULL,&d3dDeviceContext));
 	
 	D2D_init(Adapter);
@@ -350,14 +376,7 @@ void D2D_init(IDXGIAdapter1 *Adapter)
 {
 	HRESULT hr;
 	hr = D3D10CreateDevice1(Adapter,D3D10_DRIVER_TYPE_HARDWARE,NULL,D3D10_CREATE_DEVICE_DEBUG|D3D10_CREATE_DEVICE_BGRA_SUPPORT,D3D10_FEATURE_LEVEL_9_3,D3D10_1_SDK_VERSION,&d3d10Device);
-#ifdef _DEBUG	
-	if(FAILED(hr))
-	{
-		_com_error err(hr);
-		LPCTSTR errMsg = err.ErrorMessage();
-		OutputDebugString(errMsg);
-	}
-#endif
+	HR_DEBUG(hr);
 	D3D11_TEXTURE2D_DESC texture2DDescTemp;
 	IDXGIResource * sharedResource;
 	HANDLE sharedHandle;
@@ -653,14 +672,16 @@ bool RenderPipeline()
 	d3dDeviceContext->VSSetConstantBuffers(0,1,&constBufferSpace);
 
 	worldSpace = XMMatrixIdentity();
-	positionMatrix =  XMMatrixPerspectiveFovLH(0.4f*3.14f,(float)WIDTH/(float)HEIGHT,1.0f,1000.0f);
+	projectionMatrix =  XMMatrixPerspectiveFovLH(0.4f*3.14f,(float)WIDTH/(float)HEIGHT,1.0f,1000.0f);
+	viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
 
 	constBufferDesc.ByteWidth = sizeof(ConstLight);
 	d3dDevice->CreateBuffer(&constBufferDesc,NULL,&constBufferLight);
 	d3dDeviceContext->PSSetConstantBuffers(1,1,&constBufferLight);
 
 	constLight.light.pad = 0.0f;
-	constLight.light.ambientIntensity = XMFLOAT4(0.2f,0.2f,0.2f,0.2f);
+	//constLight.light.ambientIntensity = XMFLOAT4(0.2f,0.2f,0.2f,0.2f);
+	constLight.light.ambientIntensity = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
 	constLight.light.lightIntensity = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
 	constLight.light.dir = XMFLOAT3(-5.3f,1.3f,-1.0f);
 
@@ -786,7 +807,7 @@ int CALLBACK WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine
 	WindowInit(hInstance);
 
 	DirectxInit();
-	
+	InitDirectInput(hInstance);
 	RenderPipeline();
 	messageLoop();
 	return 0;
@@ -814,7 +835,7 @@ void UpdateScene(double currentFrameTime)
 	//eyePos.f[0]=eyePos.f[2]=-rot1;
 
 	//rot2 += .002;
-	rot2 += (double)currentFrameTime * 3.1415;
+	rot2 += (float)currentFrameTime * 3.1415f;
 	if(rot2 > 3.1415 * 2) rot2 = 0.0f;
 
 }
@@ -887,28 +908,30 @@ void DrawScene()
 	d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
 
 	XMMATRIX ractangle_1 = XMMatrixRotationAxis(XMVectorSet(0,1,0,0),rot2) * XMMatrixTranslation(2,0,0);
-	viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
+	
+	//viewSpace = XMMatrixLookAtLH(eyePos,eyePos + XMVector3Transform(XMVector3Transform(focusPos - eyePos,XMMatrixRotationAxis(XMVector3Cross(focusPos - eyePos,XMVector3Cross(upPos,focusPos - eyePos)),-cameraRotHorizontal)),XMMatrixRotationAxis(XMVector3Cross(upPos,focusPos - eyePos),-cameraRotVertical)),upPos);
+	//viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
 	
 	d3dDeviceContext->RSSetState(rasterState_2);
-	constSpace.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * positionMatrix);
+	constSpace.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * projectionMatrix);
 	constSpace.worldSpace = XMMatrixTranspose(worldSpace * ractangle_1);
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
 
 	d3dDeviceContext->RSSetState(rasterState_1);
-	constSpace.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * positionMatrix);
+	constSpace.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * projectionMatrix);
 	constSpace.worldSpace = XMMatrixTranspose(worldSpace * ractangle_1);
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
 
 	d3dDeviceContext->RSSetState(rasterState_2);
-	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * positionMatrix);
+	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * projectionMatrix);
 	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
 	
 	d3dDeviceContext->RSSetState(rasterState_1);
-	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * positionMatrix);
+	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * projectionMatrix);
 	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
@@ -920,4 +943,105 @@ void DrawScene()
 	drawText(timeTemp);
 
 	d3dSwapChain->Present(0,0);
+}
+
+//Input Controller
+bool InitDirectInput(HINSTANCE hInstance)
+{
+	HR_DEBUG(DirectInput8Create(hInstance,DIRECTINPUT_VERSION,IID_IDirectInput8,(void**)&directInput,NULL));
+	HR_DEBUG(directInput->CreateDevice(GUID_SysMouse,&mouseDevice,NULL));
+	HR_DEBUG(directInput->CreateDevice(GUID_SysKeyboard,&keyboardDevice,NULL));
+	mouseDevice->SetDataFormat(&c_dfDIMouse);
+	mouseDevice->SetCooperativeLevel(hwnd,DISCL_EXCLUSIVE | DISCL_NOWINKEY | DISCL_FOREGROUND);
+	keyboardDevice->SetDataFormat(&c_dfDIKeyboard);
+	keyboardDevice->SetCooperativeLevel(hwnd,DISCL_FOREGROUND | DISCL_NONEXCLUSIVE);
+	return true;
+}
+void DetectInput(double time)
+{
+	DIMOUSESTATE mouseState;
+	BYTE keyboardState[256];
+
+	mouseDevice->Acquire();
+	keyboardDevice->Acquire();
+	mouseDevice->GetDeviceState(sizeof(DIMOUSESTATE),&mouseState);
+	keyboardDevice->GetDeviceState(sizeof(keyboardState),&keyboardState);
+	
+	//if(keyboardState[DIK_UP] & 0x80)
+	//{
+	//	//OutputDebugString(L"!!UP");
+	//	cameraRotVertical += 0.785f * float(time);
+	//	if(cameraRotVertical > 0.785f)cameraRotVertical = 0.785f;
+	//}
+	//if(keyboardState[DIK_DOWN] & 0x80)
+	//{
+	//	//OutputDebugString(L"!!DOWN");
+	//	cameraRotVertical -= 0.785f * float(time);
+	//	if(cameraRotVertical < -0.785f)cameraRotVertical = -0.785f;
+	//}
+	//if(keyboardState[DIK_LEFT] & 0x80)
+	//{
+	//	//OutputDebugString(L"!!LEFT");
+	//	cameraRotHorizontal += 0.785f * float(time);
+	//	if(cameraRotHorizontal > 0.785f)cameraRotHorizontal = 0.785f;
+	//}
+	//if(keyboardState[DIK_RIGHT] & 0x80)
+	//{
+	//	//OutputDebugString(L"!!RIGHT");
+	//	cameraRotHorizontal -= 0.785f * float(time);
+	//	if(cameraRotHorizontal < -0.785f)cameraRotHorizontal = -0.785f;
+	//}
+	//viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos) * XMMatrixRotationAxis(XMVectorSet(0,1,0,0),cameraRotHorizontal) * XMMatrixRotationAxis(XMVectorSet(1,0,0,0),cameraRotVertical);
+
+	
+	static int i = 0;
+	static XMMATRIX viewSpaceTemp;
+	if(i == 0)
+	{
+		viewSpaceTemp = viewSpace;
+		i = 1;
+	}
+	if(keyboardState[DIK_LEFT] & 0x80)
+	{
+		//OutputDebugString(L"!!LEFT");
+		viewSpaceTemp *= XMMatrixRotationAxis(XMVectorSet(0,1,0,0),0.785f * float(time));
+	}
+	if(keyboardState[DIK_RIGHT] & 0x80)
+	{
+		//OutputDebugString(L"!!RIGHT");
+		viewSpaceTemp *= XMMatrixRotationAxis(XMVectorSet(0,1,0,0),-0.785f * float(time));
+	}
+	if(keyboardState[DIK_W] & 0x80)
+	{
+		//OutputDebugString(L"!!W");
+		viewSpaceTemp *= XMMatrixTranslation(0.0f,0.0f,-1.0f * float(time));
+	}
+	if(keyboardState[DIK_S] & 0x80)
+	{
+		//OutputDebugString(L"!!S");
+		viewSpaceTemp *= XMMatrixTranslation(0.0f,0.0f,1.0f * float(time));
+	}
+	if(keyboardState[DIK_A] & 0x80)
+	{
+		//OutputDebugString(L"!!A");
+		viewSpaceTemp *= XMMatrixTranslation(1.0f * float(time),0.0f,0.0f);
+	}
+	if(keyboardState[DIK_D] & 0x80)
+	{
+		//OutputDebugString(L"!!D");
+		viewSpaceTemp *= XMMatrixTranslation(-1.0f * float(time),0.0f,0.0f);
+	}
+	if(keyboardState[DIK_UP] & 0x80)
+	{
+		//OutputDebugString(L"!!UP");
+		cameraRotVertical += 0.785f * float(time);
+		if(cameraRotVertical > 0.785f)cameraRotVertical = 0.785f;
+	}
+	if(keyboardState[DIK_DOWN] & 0x80)
+	{
+		//OutputDebugString(L"!!DOWN");
+		cameraRotVertical -= 0.785f * float(time);
+		if(cameraRotVertical < -0.785f)cameraRotVertical = -0.785f;
+	}
+	viewSpace = viewSpaceTemp * XMMatrixRotationAxis(XMVectorSet(1,0,0,0),cameraRotVertical);
 }
