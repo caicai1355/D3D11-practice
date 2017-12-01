@@ -1001,16 +1001,27 @@ void DetectInput(double time)
 		viewSpaceTemp = viewSpace;
 		i = 1;
 	}
-	if(keyboardState[DIK_LEFT] & 0x80)
-	{
-		//OutputDebugString(L"!!LEFT");
-		viewSpaceTemp *= XMMatrixRotationAxis(XMVectorSet(0,1,0,0),0.785f * float(time));
-	}
-	if(keyboardState[DIK_RIGHT] & 0x80)
-	{
-		//OutputDebugString(L"!!RIGHT");
-		viewSpaceTemp *= XMMatrixRotationAxis(XMVectorSet(0,1,0,0),-0.785f * float(time));
-	}
+	
+	viewSpaceTemp *= XMMatrixRotationAxis(XMVectorSet(0,1,0,0),mouseState.lX*-0.001f);
+
+	static wchar_t hehe[128];
+	//swprintf(hehe,L"ix:%d\n",mouseState.lX);
+	//OutputDebugString(hehe);
+	//swprintf(hehe,L"iy:%d\n",mouseState.lY);
+	//OutputDebugString(hehe);
+	//swprintf(hehe,L"iz:%d\n",mouseState.lZ);
+	//OutputDebugString(hehe);
+
+	//if(keyboardState[DIK_LEFT] & 0x80)
+	//{
+	//	//OutputDebugString(L"!!LEFT");
+	//	viewSpaceTemp *= XMMatrixRotationAxis(XMVectorSet(0,1,0,0),0.785f * float(time));
+	//}
+	//if(keyboardState[DIK_RIGHT] & 0x80)
+	//{
+	//	//OutputDebugString(L"!!RIGHT");
+	//	viewSpaceTemp *= XMMatrixRotationAxis(XMVectorSet(0,1,0,0),-0.785f * float(time));
+	//}
 	if(keyboardState[DIK_W] & 0x80)
 	{
 		//OutputDebugString(L"!!W");
@@ -1031,17 +1042,20 @@ void DetectInput(double time)
 		//OutputDebugString(L"!!D");
 		viewSpaceTemp *= XMMatrixTranslation(-1.0f * float(time),0.0f,0.0f);
 	}
-	if(keyboardState[DIK_UP] & 0x80)
-	{
-		//OutputDebugString(L"!!UP");
-		cameraRotVertical += 0.785f * float(time);
-		if(cameraRotVertical > 0.785f)cameraRotVertical = 0.785f;
-	}
-	if(keyboardState[DIK_DOWN] & 0x80)
-	{
-		//OutputDebugString(L"!!DOWN");
-		cameraRotVertical -= 0.785f * float(time);
-		if(cameraRotVertical < -0.785f)cameraRotVertical = -0.785f;
-	}
+	//if(keyboardState[DIK_UP] & 0x80)
+	//{
+	//	//OutputDebugString(L"!!UP");
+	//	cameraRotVertical += 0.785f * float(time);
+	//	if(cameraRotVertical > 0.785f)cameraRotVertical = 0.785f;
+	//}
+	//if(keyboardState[DIK_DOWN] & 0x80)
+	//{
+	//	//OutputDebugString(L"!!DOWN");
+	//	cameraRotVertical -= 0.785f * float(time);
+	//	if(cameraRotVertical < -0.785f)cameraRotVertical = -0.785f;
+	//}
+	//viewSpace = viewSpaceTemp * XMMatrixRotationAxis(XMVectorSet(1,0,0,0),cameraRotVertical);
+	cameraRotVertical -= mouseState.lY*0.001f;
+	float kkk = cameraRotVertical-mouseState.lY*0.001f;
 	viewSpace = viewSpaceTemp * XMMatrixRotationAxis(XMVectorSet(1,0,0,0),cameraRotVertical);
 }
