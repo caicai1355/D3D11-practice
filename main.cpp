@@ -38,6 +38,11 @@
 #define POS_X 1200 
 #define POS_Y 700
 
+//#define WIDTH 500
+//#define HEIGHT 500 
+//#define POS_X 600 
+//#define POS_Y 200
+
 //#define LIGHT_TYPE_VERTEX_NORMAL
 #define LIGHT_TYPE_PLANE_NORMAL
 
@@ -195,7 +200,7 @@ XMFLOAT3 cubeVertex4 = XMFLOAT3(-0.5,0.5,0.5);
 XMFLOAT3 cubeVertex5 = XMFLOAT3(0.5,0.5,0.5);
 XMFLOAT3 cubeVertex6 = XMFLOAT3(-0.5,-0.5,0.5);
 XMFLOAT3 cubeVertex7 = XMFLOAT3(0.5,-0.5,0.5);
-#define CONTEXT_PIC_NUM 2.0
+#define CONTEXT_PIC_NUM 1.0
 XMFLOAT2 leftUp = XMFLOAT2(0.0,0.0);
 XMFLOAT2 rightUp = XMFLOAT2(CONTEXT_PIC_NUM,0.0);
 XMFLOAT2 leftDown = XMFLOAT2(0.0,CONTEXT_PIC_NUM);
@@ -239,7 +244,7 @@ double getTime()
 {
 	LARGE_INTEGER ct;
 	QueryPerformanceCounter(&ct);
-	return ((double)ct.QuadPart - startTime)/timeFrequency;
+	return (ct.QuadPart - startTime)/timeFrequency;
 }
 double getFrameTime()
 {
@@ -464,18 +469,6 @@ bool RenderPipeline()
 	d3dDeviceContext->VSSetShader(VS,0,0);
 
 //输入汇编器阶段(IA)
-
-	//Vertex vertex[] = 
-	//{
-	//	{XMFLOAT3(-0.5,0.5,-0.5),XMFLOAT4(1.0,1.0,1.0,1.0)},
-	//	{XMFLOAT3(0.5,0.5,-0.5),XMFLOAT4(1.0,1.0,0.0,1.0)},
-	//	{XMFLOAT3(-0.5,-0.5,-0.5),XMFLOAT4(1.0,0.0,1.0,1.0)},
-	//	{XMFLOAT3(0.5,-0.5,-0.5),XMFLOAT4(1.0,0.0,0.0,1.0)},
-	//	{XMFLOAT3(-0.5,0.5,0.5),XMFLOAT4(0.0,1.0,1.0,1.0)},
-	//	{XMFLOAT3(0.5,0.5,0.5),XMFLOAT4(0.0,1.0,0.0,1.0)},
-	//	{XMFLOAT3(-0.5,-0.5,0.5),XMFLOAT4(0.0,0.0,1.0,1.0)},
-	//	{XMFLOAT3(0.5,-0.5,0.5),XMFLOAT4(0.0,0.0,0.0,1.0)},
-	//};
 	Vertex vertex[] = 
 	{
 #ifdef LIGHT_TYPE_VERTEX_NORMAL
@@ -546,28 +539,13 @@ bool RenderPipeline()
 		{cubeVertex4,rightUp,XMFLOAT3(0.0f,0.0f,1.0f)},
 		{cubeVertex7,leftDown,XMFLOAT3(0.0f,0.0f,1.0f)},
 		{cubeVertex6,rightDown,XMFLOAT3(0.0f,0.0f,1.0f)},
-		
-		{XMFLOAT3(-10.0f,0.0f,10.0f),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
-		{XMFLOAT3(10.0f,0.0f,10.0f),XMFLOAT2(10.0f,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
-		{XMFLOAT3(-10.0f,0.0f,-10.0f),XMFLOAT2(0.0f,10.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
-		{XMFLOAT3(10.0f,0.0f,-10.0f),XMFLOAT2(10.0f,10.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
+#define PLAIN_SIZE 100.0f		
+		{XMFLOAT3(-PLAIN_SIZE,-1.0f,PLAIN_SIZE),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
+		{XMFLOAT3(PLAIN_SIZE,-1.0f,PLAIN_SIZE),XMFLOAT2(PLAIN_SIZE,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
+		{XMFLOAT3(-PLAIN_SIZE,-1.0f,-PLAIN_SIZE),XMFLOAT2(0.0f,PLAIN_SIZE),XMFLOAT3(0.0f,1.0f,0.0f)},
+		{XMFLOAT3(PLAIN_SIZE,-1.0f,-PLAIN_SIZE),XMFLOAT2(PLAIN_SIZE,PLAIN_SIZE),XMFLOAT3(0.0f,1.0f,0.0f)},
 #endif
 	};
-	//DWORD index[] = 
-	//{
-	//	0,1,2,
-	//	2,1,3,
-	//	4,5,0,
-	//	0,5,1,
-	//	4,0,6,
-	//	6,0,2,
-	//	1,5,3,
-	//	3,5,7,
-	//	7,6,3,
-	//	3,6,2,
-	//	5,4,7,
-	//	7,4,6,
-	//};
 	DWORD index[] = 
 	{
 		0,1,2,
@@ -624,7 +602,7 @@ bool RenderPipeline()
 	D3D11_BUFFER_DESC indexBufferDesc;
 	D3D11_SUBRESOURCE_DATA indexData;
 
-	indexBufferDesc.ByteWidth = sizeof(DWORD) * 36;
+	indexBufferDesc.ByteWidth = sizeof(index);
 	indexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
 	indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
 	indexBufferDesc.CPUAccessFlags = 0;
@@ -677,6 +655,7 @@ bool RenderPipeline()
 //常量缓存部分（空间变换和光照）
 	D3D11_BUFFER_DESC constBufferDesc;
 
+	//透视投影矩阵
 	constBufferDesc.ByteWidth = sizeof(ConstSpace);
 	constBufferDesc.Usage = D3D11_USAGE_DEFAULT;
 	constBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
@@ -690,6 +669,7 @@ bool RenderPipeline()
 	projectionMatrix =  XMMatrixPerspectiveFovLH(0.4f*3.14f,(float)WIDTH/(float)HEIGHT,1.0f,1000.0f);
 	viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
 
+	//平行光
 	constBufferDesc.ByteWidth = sizeof(ConstLight);
 	d3dDevice->CreateBuffer(&constBufferDesc,NULL,&constBufferLight);
 	d3dDeviceContext->PSSetConstantBuffers(1,1,&constBufferLight);
@@ -702,6 +682,7 @@ bool RenderPipeline()
 
 	d3dDeviceContext->UpdateSubresource(constBufferLight,0,NULL,&constLight,0,0);
 
+	//点光
 	constBufferDesc.ByteWidth = sizeof(ConstPointLight);
 	d3dDevice->CreateBuffer(&constBufferDesc,NULL,&constBufferPointLight);
 	d3dDeviceContext->PSSetConstantBuffers(2,1,&constBufferPointLight);
@@ -709,7 +690,7 @@ bool RenderPipeline()
 	constPointLight.pointLight.attr = XMFLOAT3(0.0f,0.5f,0.0f);
 	constPointLight.pointLight.pad_1 = constPointLight.pointLight.pad_2 = 0.0f;
 	constPointLight.pointLight.pos = XMFLOAT3(1.3f,1.2f,-1.0f);
-	constPointLight.pointLight.lightIntensity = XMFLOAT4(0.0f,1.0f,0.0f,1.0f);
+	constPointLight.pointLight.lightIntensity = XMFLOAT4(1.0f,0.0f,0.0f,1.0f);
 	
 	d3dDeviceContext->UpdateSubresource(constBufferPointLight,0,NULL,&constPointLight,0,0);
 
@@ -838,25 +819,6 @@ int CALLBACK WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine
 
 void UpdateScene(double currentFrameTime)
 {
-//白绿渐变
-	//static bool colorDirection = true;
-	//if(colorDirection)
-	//{
-	//	colorRGBA[0] -= 1.0 / 38000;
-	//	colorRGBA[2] = colorRGBA[0];
-	//	if(colorRGBA[0] < 0.0)colorDirection = false;
-	//}
-	//else
-	//{
-	//	colorRGBA[0] += 1.0 / 38000;
-	//	colorRGBA[2] = colorRGBA[0];
-	//	if(colorRGBA[0] > 1.0)colorDirection = true;
-	//}
-
-	//rot1 += .0002f;
-	//if(rot1 > 12.76f)rot1 = 0.1f;
-	//eyePos.f[0]=eyePos.f[2]=-rot1;
-
 	//rot2 += .002;
 	rot2 += (float)currentFrameTime * 3.1416f;
 	if(rot2 > 3.1416f * 2) rot2 -= 3.1416f * 2;
@@ -936,7 +898,7 @@ void DrawScene()
 	
 	//viewSpace = XMMatrixLookAtLH(eyePos,eyePos + XMVector3Transform(XMVector3Transform(focusPos - eyePos,XMMatrixRotationAxis(XMVector3Cross(focusPos - eyePos,XMVector3Cross(upPos,focusPos - eyePos)),-cameraRotHorizontal)),XMMatrixRotationAxis(XMVector3Cross(upPos,focusPos - eyePos),-cameraRotVertical)),upPos);
 	//viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
-
+	
 //画两个立方体
 	d3dDeviceContext->RSSetState(rasterState_2);
 	constSpace.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * projectionMatrix);
@@ -961,11 +923,9 @@ void DrawScene()
 	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
-
 //画草地
 	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_grass);
-	d3dDeviceContext->DrawIndexed(6,36,0);
-
+	d3dDeviceContext->DrawIndexed(42,0,0);
 
 	wchar_t timeTemp[120];
 	swprintf(timeTemp,L"%d",fps);
