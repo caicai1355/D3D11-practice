@@ -19,6 +19,7 @@
 #include <xnamath.h>
 #include <exception>
 #include <stdio.h>
+#include <math.h>
 ///////////////**************dx_input**************////////////////////
 #include <D3D10_1.h>
 #include <DXGI.h>
@@ -139,8 +140,9 @@ ID3D11Buffer *constBufferPointLight;
 ConstSpace constSpace;
 ConstLight constLight;
 ConstPointLight constPointLight;
-ID3D11ShaderResourceView * shaderResourceView;
-ID3D11SamplerState * samplerState;
+ID3D11ShaderResourceView * shaderResourceView_brain;
+ID3D11ShaderResourceView * shaderResourceView_grass;
+ID3D11SamplerState * samplerState[2];	//1、重复	2、不重复
 ID3D11BlendState * blendState;
 ID3D10Blob* VS_Buffer;
 ID3D10Blob* PS_Buffer;
@@ -193,7 +195,7 @@ XMFLOAT3 cubeVertex4 = XMFLOAT3(-0.5,0.5,0.5);
 XMFLOAT3 cubeVertex5 = XMFLOAT3(0.5,0.5,0.5);
 XMFLOAT3 cubeVertex6 = XMFLOAT3(-0.5,-0.5,0.5);
 XMFLOAT3 cubeVertex7 = XMFLOAT3(0.5,-0.5,0.5);
-#define CONTEXT_PIC_NUM 1.0
+#define CONTEXT_PIC_NUM 2.0
 XMFLOAT2 leftUp = XMFLOAT2(0.0,0.0);
 XMFLOAT2 rightUp = XMFLOAT2(CONTEXT_PIC_NUM,0.0);
 XMFLOAT2 leftDown = XMFLOAT2(0.0,CONTEXT_PIC_NUM);
@@ -507,6 +509,11 @@ bool RenderPipeline()
 		{cubeVertex4,rightUp,cubeVertex4},
 		{cubeVertex7,leftDown,cubeVertex7},
 		{cubeVertex6,rightDown,cubeVertex6},
+		
+		{XMFLOAT3(-10.0f,0.0f,10.0f),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
+		{XMFLOAT3(10.0f,0.0f,10.0f),XMFLOAT2(10.0f,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
+		{XMFLOAT3(-10.0f,0.0f,-10.0f),XMFLOAT2(0.0f,10.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
+		{XMFLOAT3(10.0f,0.0f,-10.0f),XMFLOAT2(10.0f,10.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
 #endif
 #ifdef LIGHT_TYPE_PLANE_NORMAL
 	//平面法向量
@@ -539,6 +546,11 @@ bool RenderPipeline()
 		{cubeVertex4,rightUp,XMFLOAT3(0.0f,0.0f,1.0f)},
 		{cubeVertex7,leftDown,XMFLOAT3(0.0f,0.0f,1.0f)},
 		{cubeVertex6,rightDown,XMFLOAT3(0.0f,0.0f,1.0f)},
+		
+		{XMFLOAT3(-10.0f,0.0f,10.0f),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
+		{XMFLOAT3(10.0f,0.0f,10.0f),XMFLOAT2(10.0f,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
+		{XMFLOAT3(-10.0f,0.0f,-10.0f),XMFLOAT2(0.0f,10.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
+		{XMFLOAT3(10.0f,0.0f,-10.0f),XMFLOAT2(10.0f,10.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
 #endif
 	};
 	//DWORD index[] = 
@@ -575,6 +587,9 @@ bool RenderPipeline()
 	
 		20,21,22,
 		22,21,23,
+
+		24,25,26,
+		26,25,27,
 	};
 	
 	ID3D11InputLayout *inputLayout;
@@ -699,23 +714,21 @@ bool RenderPipeline()
 	d3dDeviceContext->UpdateSubresource(constBufferPointLight,0,NULL,&constPointLight,0,0);
 
 //纹理部分
-	HR(D3DX11CreateShaderResourceViewFromFile(d3dDevice,L"braynzar.jpg",NULL,NULL,&shaderResourceView,NULL));
-	//HR(D3DX11CreateShaderResourceViewFromFile(d3dDevice,L"bb.jpg",NULL,NULL,&shaderResourceView,NULL));
+	HR(D3DX11CreateShaderResourceViewFromFile(d3dDevice,L"braynzar.jpg",NULL,NULL,&shaderResourceView_brain,NULL));
+	HR(D3DX11CreateShaderResourceViewFromFile(d3dDevice,L"grass.jpg",NULL,NULL,&shaderResourceView_grass,NULL));
 	D3D11_SAMPLER_DESC samplerDesc;
 	ZeroMemory(&samplerDesc,sizeof(D3D11_SAMPLER_DESC));
 	samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;	//可以试一下换别的选项看看效果
-	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
-	samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
-	samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
-	//samplerDesc.MaxAnisotropy = 16;
+	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+	samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+	samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
 	samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER; //可以试着修改一下？
 	samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
-	//samplerDesc.BorderColor[0] = 1.0f;
-	//samplerDesc.BorderColor[3] = 1.0f;
-	HR(d3dDevice->CreateSamplerState(&samplerDesc,&samplerState));
+	HR(d3dDevice->CreateSamplerState(&samplerDesc,samplerState));
 
-	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView);
-	d3dDeviceContext->PSSetSamplers(0,1,&samplerState);
+	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_brain);
+	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
+	
 
 //混合渲染
 	D3D11_BLEND_DESC blendDesc;
@@ -797,6 +810,16 @@ void IAInitText()
 
 	HR(d3dDevice->CreateBuffer(&indexBufferDesc,&indexData,&textIndexBuffer));
 
+	D3D11_SAMPLER_DESC samplerDesc;
+	ZeroMemory(&samplerDesc,sizeof(D3D11_SAMPLER_DESC));
+	samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;	//可以试一下换别的选项看看效果
+	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
+	samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
+	samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
+	samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER; //可以试着修改一下？
+	samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+	HR(d3dDevice->CreateSamplerState(&samplerDesc,samplerState + 1));
+
 //D2D像素着色器
 	D3DX11CompileFromFile(L"Effects.fx",NULL,NULL,"D2D_PS","ps_4_0",NULL,NULL,NULL,&D2D_PS_Buffer,NULL,NULL);
 	d3dDevice->CreatePixelShader(D2D_PS_Buffer->GetBufferPointer(),D2D_PS_Buffer->GetBufferSize(),NULL,&D2D_PS);
@@ -835,8 +858,8 @@ void UpdateScene(double currentFrameTime)
 	//eyePos.f[0]=eyePos.f[2]=-rot1;
 
 	//rot2 += .002;
-	rot2 += (float)currentFrameTime * 3.1415f;
-	if(rot2 > 3.1415 * 2) rot2 = 0.0f;
+	rot2 += (float)currentFrameTime * 3.1416f;
+	if(rot2 > 3.1416f * 2) rot2 -= 3.1416f * 2;
 
 }
 void drawText(const wchar_t * text)
@@ -890,6 +913,7 @@ void drawText(const wchar_t * text)
 	constSpace.worldSpace = constSpace.WVP;
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->PSSetShaderResources(0,1,&textResourceView);
+	d3dDeviceContext->PSSetSamplers(0,1,samplerState + 1);
 	d3dDeviceContext->PSSetShader(D2D_PS,0,0);
 	d3dDeviceContext->OMSetBlendState(blendState,blendFactor,0xffffffff);
 	d3dDeviceContext->DrawIndexed(6,0,0);
@@ -903,15 +927,17 @@ void DrawScene()
 	UINT offset = 0;
 	d3dDeviceContext->IASetVertexBuffers(0,1,&squareVertBuffer,&stride,&offset);
 	d3dDeviceContext->IASetIndexBuffer(squareIndexBuffer,DXGI_FORMAT_R32_UINT,0);
-	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView);
+	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_brain);
 	d3dDeviceContext->PSSetShader(PS,0,0);
+	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
 	d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
 
 	XMMATRIX ractangle_1 = XMMatrixRotationAxis(XMVectorSet(0,1,0,0),rot2) * XMMatrixTranslation(2,0,0);
 	
 	//viewSpace = XMMatrixLookAtLH(eyePos,eyePos + XMVector3Transform(XMVector3Transform(focusPos - eyePos,XMMatrixRotationAxis(XMVector3Cross(focusPos - eyePos,XMVector3Cross(upPos,focusPos - eyePos)),-cameraRotHorizontal)),XMMatrixRotationAxis(XMVector3Cross(upPos,focusPos - eyePos),-cameraRotVertical)),upPos);
 	//viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
-	
+
+//画两个立方体
 	d3dDeviceContext->RSSetState(rasterState_2);
 	constSpace.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * projectionMatrix);
 	constSpace.worldSpace = XMMatrixTranspose(worldSpace * ractangle_1);
@@ -935,6 +961,10 @@ void DrawScene()
 	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
+
+//画草地
+	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_grass);
+	d3dDeviceContext->DrawIndexed(6,36,0);
 
 
 	wchar_t timeTemp[120];
@@ -1004,14 +1034,6 @@ void DetectInput(double time)
 	
 	viewSpaceTemp *= XMMatrixRotationAxis(XMVectorSet(0,1,0,0),mouseState.lX*-0.001f);
 
-	static wchar_t hehe[128];
-	//swprintf(hehe,L"ix:%d\n",mouseState.lX);
-	//OutputDebugString(hehe);
-	//swprintf(hehe,L"iy:%d\n",mouseState.lY);
-	//OutputDebugString(hehe);
-	//swprintf(hehe,L"iz:%d\n",mouseState.lZ);
-	//OutputDebugString(hehe);
-
 	//if(keyboardState[DIK_LEFT] & 0x80)
 	//{
 	//	//OutputDebugString(L"!!LEFT");
@@ -1056,6 +1078,6 @@ void DetectInput(double time)
 	//}
 	//viewSpace = viewSpaceTemp * XMMatrixRotationAxis(XMVectorSet(1,0,0,0),cameraRotVertical);
 	cameraRotVertical -= mouseState.lY*0.001f;
-	float kkk = cameraRotVertical-mouseState.lY*0.001f;
+	if(cameraRotVertical < -6.2832f || cameraRotVertical > 6.2832f)cameraRotVertical = fmod(cameraRotVertical,6.2832f);
 	viewSpace = viewSpaceTemp * XMMatrixRotationAxis(XMVectorSet(1,0,0,0),cameraRotVertical);
 }
