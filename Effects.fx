@@ -33,9 +33,14 @@ SamplerState ObjSamplerState;
 struct VS_OUTPUT
 {
 	float4 Pos : SV_POSITION;
-	float4 WorldPos : POSITION;	//试一下改成 SV_POSITION 会怎样
+	float4 WorldPos : POSITION;	//试一下改成 SV_POSITION 会怎样，会报错。。。
 	float2 Texture : TEXTURE;
 	float3 Normal : NORMAL;
+};
+struct VS_SKYBOX_OUTPUT
+{
+	float4 Pos : SV_POSITION;
+	float2 Texture : TEXTURE;
 };
 
 
@@ -46,6 +51,14 @@ VS_OUTPUT VS(float4 inPos : POSITION,float2 inTexture : TEXTURE,float3 inNormal 
 	output.Texture = inTexture;
 	output.WorldPos = mul(inPos,worldSpace);
 	output.Normal = mul(inNormal,worldSpace);
+	return output;
+}
+
+VS_SKYBOX_OUTPUT SKYBOX_VS(float4 inPos : POSITION,float2 inTexture : TEXTURE,float3 inNormal : NORMAL)
+{
+	VS_SKYBOX_OUTPUT output;
+	output.Pos = mul(inPos,WVP).xyww;
+	output.Texture = inPos;
 	return output;
 }
 
@@ -73,6 +86,12 @@ float4 PS(VS_OUTPUT input) : SV_TARGET
 float4 D2D_PS(VS_OUTPUT input) : SV_TARGET
 {
 	float4 temp = ObjTexture.Sample( ObjSamplerState, input.Texture);
-	clip(temp.a - 0.25);
+	//clip(temp.a - 0.25);
+	return temp;
+}
+
+float4 SKYBOX_PS(VS_SKYBOX_OUTPUT input) : SV_TARGET
+{
+	float4 temp = ObjTexture.Sample( ObjSamplerState, input.Texture);
 	return temp;
 }

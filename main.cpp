@@ -85,11 +85,6 @@
 
 const TCHAR ClassName[]=TEXT("dx_world");
 
-//struct Vertex
-//{
-//	XMFLOAT3 position;
-//	XMFLOAT4 color;
-//};
 struct Vertex
 {
 	XMFLOAT3 position;
@@ -164,7 +159,7 @@ ID3D10Device1 * d3d10Device;
 ID3D11Texture2D *myTestTexture;
 ID3D10Blob* D2D_PS_Buffer;
 ID3D11PixelShader* D2D_PS;
-ID3D11ShaderResourceView * textResourceView;
+ID3D11ShaderResourceView * shaderResourceView_text;
 ID2D1RenderTarget * d2dRenderTarget;
 IDWriteTextFormat *textFormat;
 ID2D1SolidColorBrush *Brush;
@@ -179,6 +174,17 @@ IDirectInputDevice8 * mouseDevice;
 IDirectInputDevice8 * keyboardDevice;
 FLOAT cameraRotHorizontal = 0.0f;
 FLOAT cameraRotVertical = 0.0f;
+
+//skyBox
+ID3D10Blob* SkyBox_VS_Buffer;
+ID3D10Blob* SkyBox_PS_Buffer;
+ID3D11VertexShader* SkyBox_VS;
+ID3D11PixelShader* SkyBox_PS;
+ID3D11Texture2D * skyBoxTexture;
+ID3D11ShaderResourceView * shaderResourceView_skyBox;
+ID3D11Buffer* skyBoxVertBuffer;
+ID3D11Buffer* skyBoxIndexBuffer;
+
 
 //time
 double timeFrequency = 0.0;	//count
@@ -205,6 +211,127 @@ XMFLOAT2 leftUp = XMFLOAT2(0.0,0.0);
 XMFLOAT2 rightUp = XMFLOAT2(CONTEXT_PIC_NUM,0.0);
 XMFLOAT2 leftDown = XMFLOAT2(0.0,CONTEXT_PIC_NUM);
 XMFLOAT2 rightDown = XMFLOAT2(CONTEXT_PIC_NUM,CONTEXT_PIC_NUM);
+#define SKYBOX_SIZE 1.0
+XMFLOAT3 skyBox0 = XMFLOAT3(-SKYBOX_SIZE,SKYBOX_SIZE,-SKYBOX_SIZE);
+XMFLOAT3 skyBox1 = XMFLOAT3(SKYBOX_SIZE,SKYBOX_SIZE,-SKYBOX_SIZE);
+XMFLOAT3 skyBox2 = XMFLOAT3(-SKYBOX_SIZE,-SKYBOX_SIZE,-SKYBOX_SIZE);
+XMFLOAT3 skyBox3 = XMFLOAT3(SKYBOX_SIZE,-SKYBOX_SIZE,-SKYBOX_SIZE);
+XMFLOAT3 skyBox4 = XMFLOAT3(-SKYBOX_SIZE,SKYBOX_SIZE,SKYBOX_SIZE);
+XMFLOAT3 skyBox5 = XMFLOAT3(SKYBOX_SIZE,SKYBOX_SIZE,SKYBOX_SIZE);
+XMFLOAT3 skyBox6 = XMFLOAT3(-SKYBOX_SIZE,-SKYBOX_SIZE,SKYBOX_SIZE);
+XMFLOAT3 skyBox7 = XMFLOAT3(SKYBOX_SIZE,-SKYBOX_SIZE,SKYBOX_SIZE);
+
+Vertex vertex[] = 
+{
+#ifdef LIGHT_TYPE_VERTEX_NORMAL
+//顶点法向量
+	{cubeVertex0,leftUp,cubeVertex0},
+	{cubeVertex1,rightUp,cubeVertex1},
+	{cubeVertex2,leftDown,cubeVertex2},
+	{cubeVertex3,rightDown,cubeVertex3},
+	
+	{cubeVertex4,leftUp,cubeVertex4},
+	{cubeVertex0,rightUp,cubeVertex0},
+	{cubeVertex6,leftDown,cubeVertex6},
+	{cubeVertex2,rightDown,cubeVertex2},
+	
+	{cubeVertex4,leftUp,cubeVertex4},
+	{cubeVertex5,rightUp,cubeVertex5},
+	{cubeVertex0,leftDown,cubeVertex0},
+	{cubeVertex1,rightDown,cubeVertex1},
+	
+	{cubeVertex1,leftUp,cubeVertex1},
+	{cubeVertex5,rightUp,cubeVertex5},
+	{cubeVertex3,leftDown,cubeVertex3},
+	{cubeVertex7,rightDown,cubeVertex7},
+	
+	{cubeVertex7,leftUp,cubeVertex7},
+	{cubeVertex6,rightUp,cubeVertex6},
+	{cubeVertex3,leftDown,cubeVertex3},
+	{cubeVertex2,rightDown,cubeVertex2},
+	
+	{cubeVertex5,leftUp,cubeVertex5},
+	{cubeVertex4,rightUp,cubeVertex4},
+	{cubeVertex7,leftDown,cubeVertex7},
+	{cubeVertex6,rightDown,cubeVertex6},
+		
+	{XMFLOAT3(-10.0f,0.0f,10.0f),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
+	{XMFLOAT3(10.0f,0.0f,10.0f),XMFLOAT2(10.0f,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
+	{XMFLOAT3(-10.0f,0.0f,-10.0f),XMFLOAT2(0.0f,10.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
+	{XMFLOAT3(10.0f,0.0f,-10.0f),XMFLOAT2(10.0f,10.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
+#endif
+#ifdef LIGHT_TYPE_PLANE_NORMAL
+//平面法向量
+	//two boxes
+	{cubeVertex0,leftUp,XMFLOAT3(0.0f,0.0f,-1.0f)},
+	{cubeVertex1,rightUp,XMFLOAT3(0.0f,0.0f,-1.0f)},
+	{cubeVertex2,leftDown,XMFLOAT3(0.0f,0.0f,-1.0f)},
+	{cubeVertex3,rightDown,XMFLOAT3(0.0f,0.0f,-1.0f)},
+	
+	{cubeVertex4,leftUp,XMFLOAT3(-1.0f,0.0f,0.0f)},
+	{cubeVertex0,rightUp,XMFLOAT3(-1.0f,0.0f,0.0f)},
+	{cubeVertex6,leftDown,XMFLOAT3(-1.0f,0.0f,0.0f)},
+	{cubeVertex2,rightDown,XMFLOAT3(-1.0f,0.0f,0.0f)},
+	
+	{cubeVertex4,leftUp,XMFLOAT3(0.0f,1.0f,0.0f)},
+	{cubeVertex5,rightUp,XMFLOAT3(0.0f,1.0f,0.0f)},
+	{cubeVertex0,leftDown,XMFLOAT3(0.0f,1.0f,0.0f)},
+	{cubeVertex1,rightDown,XMFLOAT3(0.0f,1.0f,0.0f)},
+	
+	{cubeVertex1,leftUp,XMFLOAT3(1.0f,0.0f,0.0f)},
+	{cubeVertex5,rightUp,XMFLOAT3(1.0f,0.0f,0.0f)},
+	{cubeVertex3,leftDown,XMFLOAT3(1.0f,0.0f,0.0f)},
+	{cubeVertex7,rightDown,XMFLOAT3(1.0f,0.0f,0.0f)},
+	
+	{cubeVertex7,leftUp,XMFLOAT3(0.0f,-1.0f,0.0f)},
+	{cubeVertex6,rightUp,XMFLOAT3(0.0f,-1.0f,0.0f)},
+	{cubeVertex3,leftDown,XMFLOAT3(0.0f,-1.0f,0.0f)},
+	{cubeVertex2,rightDown,XMFLOAT3(0.0f,-1.0f,0.0f)},
+	
+	{cubeVertex5,leftUp,XMFLOAT3(0.0f,0.0f,1.0f)},
+	{cubeVertex4,rightUp,XMFLOAT3(0.0f,0.0f,1.0f)},
+	{cubeVertex7,leftDown,XMFLOAT3(0.0f,0.0f,1.0f)},
+	{cubeVertex6,rightDown,XMFLOAT3(0.0f,0.0f,1.0f)},
+
+	//grass
+#define PLAIN_SIZE 100.0f		
+	{XMFLOAT3(-PLAIN_SIZE,-1.0f,PLAIN_SIZE),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
+	{XMFLOAT3(PLAIN_SIZE,-1.0f,PLAIN_SIZE),XMFLOAT2(PLAIN_SIZE,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
+	{XMFLOAT3(-PLAIN_SIZE,-1.0f,-PLAIN_SIZE),XMFLOAT2(0.0f,PLAIN_SIZE),XMFLOAT3(0.0f,1.0f,0.0f)},
+	{XMFLOAT3(PLAIN_SIZE,-1.0f,-PLAIN_SIZE),XMFLOAT2(PLAIN_SIZE,PLAIN_SIZE),XMFLOAT3(0.0f,1.0f,0.0f)},
+#endif
+};
+DWORD index[] = 
+{
+	//two boxes
+	0,1,2,
+	2,1,3,
+
+	4,5,6,
+	6,5,7,
+	
+	8,9,10,
+	10,9,11,
+	
+	12,13,14,
+	14,13,15,
+	
+	16,17,18,
+	18,17,19,
+	
+	20,21,22,
+	22,21,23,
+
+	//grass
+	24,25,26,
+	26,25,27,
+};
+
+D3D11_INPUT_ELEMENT_DESC verDesc[3] = {
+	{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0},
+	{"TEXTURE",0,DXGI_FORMAT_R32G32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0},
+	{"NORMAL",0,DXGI_FORMAT_R32G32B32_FLOAT,0,20,D3D11_INPUT_PER_VERTEX_DATA,0}
+};
 
 void D2D_init(IDXGIAdapter1 *Adapter);
 void IAInitText();
@@ -448,7 +575,7 @@ void D2D_init(IDXGIAdapter1 *Adapter)
 	HR(textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR));
 
 	d3d10Device->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_POINTLIST);	
-	d3dDevice->CreateShaderResourceView(myTestTexture,NULL,&textResourceView);
+	d3dDevice->CreateShaderResourceView(myTestTexture,NULL,&shaderResourceView_text);
 }
 
 bool RenderPipeline()
@@ -469,118 +596,8 @@ bool RenderPipeline()
 	d3dDeviceContext->VSSetShader(VS,0,0);
 
 //输入汇编器阶段(IA)
-	Vertex vertex[] = 
-	{
-#ifdef LIGHT_TYPE_VERTEX_NORMAL
-	//顶点法向量
-		{cubeVertex0,leftUp,cubeVertex0},
-		{cubeVertex1,rightUp,cubeVertex1},
-		{cubeVertex2,leftDown,cubeVertex2},
-		{cubeVertex3,rightDown,cubeVertex3},
-	
-		{cubeVertex4,leftUp,cubeVertex4},
-		{cubeVertex0,rightUp,cubeVertex0},
-		{cubeVertex6,leftDown,cubeVertex6},
-		{cubeVertex2,rightDown,cubeVertex2},
-	
-		{cubeVertex4,leftUp,cubeVertex4},
-		{cubeVertex5,rightUp,cubeVertex5},
-		{cubeVertex0,leftDown,cubeVertex0},
-		{cubeVertex1,rightDown,cubeVertex1},
-	
-		{cubeVertex1,leftUp,cubeVertex1},
-		{cubeVertex5,rightUp,cubeVertex5},
-		{cubeVertex3,leftDown,cubeVertex3},
-		{cubeVertex7,rightDown,cubeVertex7},
-	
-		{cubeVertex7,leftUp,cubeVertex7},
-		{cubeVertex6,rightUp,cubeVertex6},
-		{cubeVertex3,leftDown,cubeVertex3},
-		{cubeVertex2,rightDown,cubeVertex2},
-	
-		{cubeVertex5,leftUp,cubeVertex5},
-		{cubeVertex4,rightUp,cubeVertex4},
-		{cubeVertex7,leftDown,cubeVertex7},
-		{cubeVertex6,rightDown,cubeVertex6},
-		
-		{XMFLOAT3(-10.0f,0.0f,10.0f),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
-		{XMFLOAT3(10.0f,0.0f,10.0f),XMFLOAT2(10.0f,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
-		{XMFLOAT3(-10.0f,0.0f,-10.0f),XMFLOAT2(0.0f,10.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
-		{XMFLOAT3(10.0f,0.0f,-10.0f),XMFLOAT2(10.0f,10.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
-#endif
-#ifdef LIGHT_TYPE_PLANE_NORMAL
-	//平面法向量
-		{cubeVertex0,leftUp,XMFLOAT3(0.0f,0.0f,-1.0f)},
-		{cubeVertex1,rightUp,XMFLOAT3(0.0f,0.0f,-1.0f)},
-		{cubeVertex2,leftDown,XMFLOAT3(0.0f,0.0f,-1.0f)},
-		{cubeVertex3,rightDown,XMFLOAT3(0.0f,0.0f,-1.0f)},
-	
-		{cubeVertex4,leftUp,XMFLOAT3(-1.0f,0.0f,0.0f)},
-		{cubeVertex0,rightUp,XMFLOAT3(-1.0f,0.0f,0.0f)},
-		{cubeVertex6,leftDown,XMFLOAT3(-1.0f,0.0f,0.0f)},
-		{cubeVertex2,rightDown,XMFLOAT3(-1.0f,0.0f,0.0f)},
-	
-		{cubeVertex4,leftUp,XMFLOAT3(0.0f,1.0f,0.0f)},
-		{cubeVertex5,rightUp,XMFLOAT3(0.0f,1.0f,0.0f)},
-		{cubeVertex0,leftDown,XMFLOAT3(0.0f,1.0f,0.0f)},
-		{cubeVertex1,rightDown,XMFLOAT3(0.0f,1.0f,0.0f)},
-	
-		{cubeVertex1,leftUp,XMFLOAT3(1.0f,0.0f,0.0f)},
-		{cubeVertex5,rightUp,XMFLOAT3(1.0f,0.0f,0.0f)},
-		{cubeVertex3,leftDown,XMFLOAT3(1.0f,0.0f,0.0f)},
-		{cubeVertex7,rightDown,XMFLOAT3(1.0f,0.0f,0.0f)},
-	
-		{cubeVertex7,leftUp,XMFLOAT3(0.0f,-1.0f,0.0f)},
-		{cubeVertex6,rightUp,XMFLOAT3(0.0f,-1.0f,0.0f)},
-		{cubeVertex3,leftDown,XMFLOAT3(0.0f,-1.0f,0.0f)},
-		{cubeVertex2,rightDown,XMFLOAT3(0.0f,-1.0f,0.0f)},
-	
-		{cubeVertex5,leftUp,XMFLOAT3(0.0f,0.0f,1.0f)},
-		{cubeVertex4,rightUp,XMFLOAT3(0.0f,0.0f,1.0f)},
-		{cubeVertex7,leftDown,XMFLOAT3(0.0f,0.0f,1.0f)},
-		{cubeVertex6,rightDown,XMFLOAT3(0.0f,0.0f,1.0f)},
-#define PLAIN_SIZE 100.0f		
-		{XMFLOAT3(-PLAIN_SIZE,-1.0f,PLAIN_SIZE),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
-		{XMFLOAT3(PLAIN_SIZE,-1.0f,PLAIN_SIZE),XMFLOAT2(PLAIN_SIZE,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
-		{XMFLOAT3(-PLAIN_SIZE,-1.0f,-PLAIN_SIZE),XMFLOAT2(0.0f,PLAIN_SIZE),XMFLOAT3(0.0f,1.0f,0.0f)},
-		{XMFLOAT3(PLAIN_SIZE,-1.0f,-PLAIN_SIZE),XMFLOAT2(PLAIN_SIZE,PLAIN_SIZE),XMFLOAT3(0.0f,1.0f,0.0f)},
-#endif
-	};
-	DWORD index[] = 
-	{
-		0,1,2,
-		2,1,3,
-
-		4,5,6,
-		6,5,7,
-	
-		8,9,10,
-		10,9,11,
-	
-		12,13,14,
-		14,13,15,
-	
-		16,17,18,
-		18,17,19,
-	
-		20,21,22,
-		22,21,23,
-
-		24,25,26,
-		26,25,27,
-	};
 	
 	ID3D11InputLayout *inputLayout;
-
-	D3D11_INPUT_ELEMENT_DESC verDesc[3] = {
-		{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0},
-		{"TEXTURE",0,DXGI_FORMAT_R32G32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0},
-		{"NORMAL",0,DXGI_FORMAT_R32G32B32_FLOAT,0,20,D3D11_INPUT_PER_VERTEX_DATA,0}
-	};
-
-	//D3D11_INPUT_ELEMENT_DESC verDesc[1] = {
-	//	{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0}
-	//};
 
 	D3D11_BUFFER_DESC vertexBufferDesc;
 	D3D11_SUBRESOURCE_DATA vertexData;
@@ -675,8 +692,8 @@ bool RenderPipeline()
 	d3dDeviceContext->PSSetConstantBuffers(1,1,&constBufferLight);
 
 	constLight.light.pad = 0.0f;
-	//constLight.light.ambientIntensity = XMFLOAT4(0.2f,0.2f,0.2f,0.2f);
-	constLight.light.ambientIntensity = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
+	constLight.light.ambientIntensity = XMFLOAT4(0.2f,0.2f,0.2f,0.2f);
+	//constLight.light.ambientIntensity = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);	//这个其实是环境光，就先合并到平行光里了
 	constLight.light.lightIntensity = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
 	constLight.light.dir = XMFLOAT3(-5.3f,1.3f,-1.0f);
 
@@ -710,7 +727,6 @@ bool RenderPipeline()
 	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_brain);
 	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
 	
-
 //混合渲染
 	D3D11_BLEND_DESC blendDesc;
 	D3D11_RENDER_TARGET_BLEND_DESC RenderTargetBlendDesc;
@@ -730,19 +746,141 @@ bool RenderPipeline()
 
 	d3dDevice->CreateBlendState(&blendDesc,&blendState);
 	
-
 	IAInitText();
 
 	return true;
+}
+void SkyBoxInit()
+{
+	HRESULT hr;
+
+//创建天空盒的顶点着色器和像素着色器
+	hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "SKYBOX_VS", "vs_4_0", 0, 0, 0, &SkyBox_VS_Buffer, 0, 0);
+	HR(hr);
+	hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "SKYBOX_PS", "ps_4_0", 0, 0, 0, &SkyBox_PS_Buffer, 0, 0);
+	HR(hr);
+	
+	hr = d3dDevice->CreateVertexShader(SkyBox_VS_Buffer->GetBufferPointer(),SkyBox_VS_Buffer->GetBufferSize(),NULL,&SkyBox_VS);
+	HR(hr);
+	hr = d3dDevice->CreatePixelShader(SkyBox_PS_Buffer->GetBufferPointer(),SkyBox_PS_Buffer->GetBufferSize(),NULL,&SkyBox_PS);
+	HR(hr);
+
+	Vertex skyBoxVertex[] = 
+	{
+		//{skyBox0,leftUp,XMFLOAT3(0.0f,0.0f,-1.0f)},
+		//{skyBox1,rightUp,XMFLOAT3(0.0f,0.0f,-1.0f)},
+		//{skyBox2,leftDown,XMFLOAT3(0.0f,0.0f,-1.0f)},
+		//{skyBox3,rightDown,XMFLOAT3(0.0f,0.0f,-1.0f)},
+	
+		//{skyBox4,leftUp,XMFLOAT3(-1.0f,0.0f,0.0f)},
+		//{skyBox0,rightUp,XMFLOAT3(-1.0f,0.0f,0.0f)},
+		//{skyBox6,leftDown,XMFLOAT3(-1.0f,0.0f,0.0f)},
+		//{skyBox2,rightDown,XMFLOAT3(-1.0f,0.0f,0.0f)},
+	
+		//{skyBox4,leftUp,XMFLOAT3(0.0f,1.0f,0.0f)},
+		//{skyBox5,rightUp,XMFLOAT3(0.0f,1.0f,0.0f)},
+		//{skyBox0,leftDown,XMFLOAT3(0.0f,1.0f,0.0f)},
+		//{skyBox1,rightDown,XMFLOAT3(0.0f,1.0f,0.0f)},
+	
+		//{skyBox1,leftUp,XMFLOAT3(1.0f,0.0f,0.0f)},
+		//{skyBox5,rightUp,XMFLOAT3(1.0f,0.0f,0.0f)},
+		//{skyBox3,leftDown,XMFLOAT3(1.0f,0.0f,0.0f)},
+		//{skyBox7,rightDown,XMFLOAT3(1.0f,0.0f,0.0f)},
+	
+		//{skyBox7,leftUp,XMFLOAT3(0.0f,-1.0f,0.0f)},
+		//{skyBox6,rightUp,XMFLOAT3(0.0f,-1.0f,0.0f)},
+		//{skyBox3,leftDown,XMFLOAT3(0.0f,-1.0f,0.0f)},
+		//{skyBox2,rightDown,XMFLOAT3(0.0f,-1.0f,0.0f)},
+	
+		//{skyBox5,leftUp,XMFLOAT3(0.0f,0.0f,1.0f)},
+		//{skyBox4,rightUp,XMFLOAT3(0.0f,0.0f,1.0f)},
+		//{skyBox7,leftDown,XMFLOAT3(0.0f,0.0f,1.0f)},
+		//{skyBox6,rightDown,XMFLOAT3(0.0f,0.0f,1.0f)},
+		
+		{XMFLOAT3(-1.0,1.0,1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)},
+		{XMFLOAT3(1.0,1.0,1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)},
+		{XMFLOAT3(-1.0,-1.0,1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)},
+		{XMFLOAT3(1.0,-1.0,1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)},
+		{XMFLOAT3(-1.0,1.0,-1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)},
+		{XMFLOAT3(1.0,1.0,-1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)},
+		{XMFLOAT3(-1.0,-1.0,-1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)},
+		{XMFLOAT3(1.0,-1.0,-1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)},
+	};
+	UINT skyBoxIndex[] = 
+	{
+		0,1,2,
+		2,1,3,
+
+		4,5,0,
+		0,5,1,
+
+		2,3,6,
+		6,3,7,
+
+		5,4,7,
+		7,4,6,
+
+		4,0,6,
+		6,0,2,
+
+		1,5,3,
+		3,5,7,
+	};
+
+//天空盒纹理
+	HR(D3DX11CreateTextureFromFile(d3dDevice,L"skymap.dds",NULL,NULL,(ID3D11Resource**)&skyBoxTexture,NULL));
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC skyBoxViewDesc;
+	D3D11_TEXTURE2D_DESC textureDesc;
+	skyBoxTexture->GetDesc(&textureDesc);
+	skyBoxViewDesc.Format = textureDesc.Format;
+	skyBoxViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
+	skyBoxViewDesc.TextureCube.MipLevels = textureDesc.MipLevels;
+	skyBoxViewDesc.TextureCube.MostDetailedMip = 0;
+
+	d3dDevice->CreateShaderResourceView(skyBoxTexture,&skyBoxViewDesc,&shaderResourceView_skyBox);
+//天空盒顶点缓冲区和索引缓冲区
+	D3D11_BUFFER_DESC vertexBufferDesc;
+	D3D11_SUBRESOURCE_DATA vertexData;
+
+	vertexBufferDesc.ByteWidth = sizeof(skyBoxVertex);
+	vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	vertexBufferDesc.CPUAccessFlags = 0;
+	vertexBufferDesc.MiscFlags = 0;
+	vertexBufferDesc.StructureByteStride = 0;
+
+	vertexData.pSysMem = skyBoxVertex;
+	vertexData.SysMemPitch = 0;
+	vertexData.SysMemSlicePitch = 0;
+
+	hr = d3dDevice->CreateBuffer(&vertexBufferDesc,&vertexData,&skyBoxVertBuffer);
+	HR(hr);
+
+	D3D11_BUFFER_DESC indexBufferDesc;
+	D3D11_SUBRESOURCE_DATA indexData;
+
+	indexBufferDesc.ByteWidth = sizeof(index);
+	indexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	indexBufferDesc.CPUAccessFlags = 0;
+	indexBufferDesc.MiscFlags = 0;
+	indexBufferDesc.StructureByteStride = 0;
+
+	indexData.pSysMem = skyBoxIndex;
+	indexData.SysMemPitch = 0;
+	indexData.SysMemSlicePitch = 0;
+
+	hr = d3dDevice->CreateBuffer(&indexBufferDesc,&indexData,&skyBoxIndexBuffer);
 }
 void IAInitText()
 {
 	Vertex textVertex[] = 
 	{
-		{XMFLOAT3(-1.0,1.0,-1.0),leftUp},
-		{XMFLOAT3(1.0,1.0,-1.0),rightUp},
-		{XMFLOAT3(-1.0,-1.0,-1.0),leftDown},
-		{XMFLOAT3(1.0,-1.0,-1.0),rightDown},
+		{XMFLOAT3(-1.0,1.0,-1.0),leftUp,XMFLOAT3(0.0f,0.0f,-1.0f)},
+		{XMFLOAT3(1.0,1.0,-1.0),rightUp,XMFLOAT3(0.0f,0.0f,-1.0f)},
+		{XMFLOAT3(-1.0,-1.0,-1.0),leftDown,XMFLOAT3(0.0f,0.0f,-1.0f)},
+		{XMFLOAT3(1.0,-1.0,-1.0),rightDown,XMFLOAT3(0.0f,0.0f,-1.0f)},
 	};
 	DWORD textIndex[] = 
 	{
@@ -750,13 +888,9 @@ void IAInitText()
 		2,1,3,
 	};
 
-	D3D11_INPUT_ELEMENT_DESC verDesc[2] = {
-		{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0},
-		{"TEXTURE",0,DXGI_FORMAT_R32G32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0}
-	};
-
-	//D3D11_INPUT_ELEMENT_DESC verDesc[1] = {
-	//	{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0}
+	//D3D11_INPUT_ELEMENT_DESC verDesc[2] = {
+	//	{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0},
+	//	{"TEXTURE",0,DXGI_FORMAT_R32G32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0}
 	//};
 
 	D3D11_BUFFER_DESC vertexBufferDesc;
@@ -874,11 +1008,26 @@ void drawText(const wchar_t * text)
 	constSpace.WVP = XMMatrixTranspose(XMMatrixIdentity());
 	constSpace.worldSpace = constSpace.WVP;
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
-	d3dDeviceContext->PSSetShaderResources(0,1,&textResourceView);
+	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_text);
 	d3dDeviceContext->PSSetSamplers(0,1,samplerState + 1);
 	d3dDeviceContext->PSSetShader(D2D_PS,0,0);
 	d3dDeviceContext->OMSetBlendState(blendState,blendFactor,0xffffffff);
 	d3dDeviceContext->DrawIndexed(6,0,0);
+}
+void DrawSkyBox()
+{
+	UINT stride = sizeof(Vertex);
+	UINT offset = 0;
+	d3dDeviceContext->IASetVertexBuffers(0,1,&skyBoxVertBuffer,&stride,&offset);
+	d3dDeviceContext->IASetIndexBuffer(skyBoxIndexBuffer,DXGI_FORMAT_R32_UINT,0);
+	d3dDeviceContext->VSSetShader(SkyBox_VS,0,0);
+	d3dDeviceContext->PSSetShader(SkyBox_PS,0,0);
+	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_skyBox);
+
+	constSpace.WVP = XMMatrixTranspose(projectionMatrix);
+	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
+
+	d3dDeviceContext->DrawIndexed(24,0,0);
 }
 void DrawScene()
 {
@@ -898,6 +1047,8 @@ void DrawScene()
 	
 	//viewSpace = XMMatrixLookAtLH(eyePos,eyePos + XMVector3Transform(XMVector3Transform(focusPos - eyePos,XMMatrixRotationAxis(XMVector3Cross(focusPos - eyePos,XMVector3Cross(upPos,focusPos - eyePos)),-cameraRotHorizontal)),XMMatrixRotationAxis(XMVector3Cross(upPos,focusPos - eyePos),-cameraRotVertical)),upPos);
 	//viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
+//画天空盒
+	DrawSkyBox();
 	
 //画两个立方体
 	d3dDeviceContext->RSSetState(rasterState_2);
@@ -927,9 +1078,9 @@ void DrawScene()
 	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_grass);
 	d3dDeviceContext->DrawIndexed(42,0,0);
 
+//显示文本
 	wchar_t timeTemp[120];
 	swprintf(timeTemp,L"%d",fps);
-
 	drawText(timeTemp);
 
 	d3dSwapChain->Present(0,0);
