@@ -57,9 +57,9 @@ VS_OUTPUT VS(float4 inPos : POSITION,float2 inTexture : TEXTURE,float3 inNormal 
 VS_SKYBOX_OUTPUT SKYBOX_VS(float4 inPos : POSITION,float2 inTexture : TEXTURE,float3 inNormal : NORMAL)
 {
 	VS_SKYBOX_OUTPUT output;
-	output.Pos = mul(inPos,WVP);
+	//output.Pos = mul(inPos,WVP);
 	//output.Pos = float4(mul(inPos,WVP).xy,mul(inPos,WVP).w * 0.99,mul(inPos,WVP).w);
-	//output.Pos = float4(mul(inPos,WVP).xyww);
+	output.Pos = float4(mul(inPos,WVP).xyww);
 	output.Texture = inPos;
 	return output;
 }

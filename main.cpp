@@ -688,8 +688,8 @@ bool RenderPipeline()
 	projectionMatrix =  XMMatrixPerspectiveFovLH(0.4f*3.14f,(float)WIDTH/(float)HEIGHT,1.0f,1000.0f);
 	viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
 	cameraDir.v = focusPos.v - eyePos.v;
-	cameraRotHorizontal = atan2(cameraDir.f[1],cameraDir.f[0]);
-	cameraRotVertical= atan2(cameraDir.f[1],cameraDir.f[2]);
+	cameraRotHorizontal = atan2(cameraDir.f[2],cameraDir.f[0]);
+	cameraRotVertical= atan2(cameraDir.f[1],sqrt(cameraDir.f[2] * cameraDir.f[2] + cameraDir.f[0] * cameraDir.f[0]));
 
 	//平行光
 	constBufferDesc.ByteWidth = sizeof(ConstLight);
@@ -914,7 +914,7 @@ void IAInitText()
 	vertexData.SysMemPitch = 0;
 	vertexData.SysMemSlicePitch = 0;
 
-	HR(d3dDevice->CreateBuffer(&vertexBufferDesc,&vertexData,&skyBoxVertBuffer));
+	HR(d3dDevice->CreateBuffer(&vertexBufferDesc,&vertexData,&textVertBuffer));
 
 	D3D11_BUFFER_DESC indexBufferDesc;
 	D3D11_SUBRESOURCE_DATA indexData;
@@ -930,7 +930,7 @@ void IAInitText()
 	indexData.SysMemPitch = 0;
 	indexData.SysMemSlicePitch = 0;
 
-	HR(d3dDevice->CreateBuffer(&indexBufferDesc,&indexData,&skyBoxIndexBuffer));
+	HR(d3dDevice->CreateBuffer(&indexBufferDesc,&indexData,&textIndexBuffer));
 
 	D3D11_SAMPLER_DESC samplerDesc;
 	ZeroMemory(&samplerDesc,sizeof(D3D11_SAMPLER_DESC));
@@ -1032,14 +1032,14 @@ void DrawSkyBox()
 	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
 	d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
 	
-	wchar_t hehe[128];
-	swprintf(hehe,L"===============\ncameraPos.x = %f\n",-cameraPos.x);
-	OutputDebugString(hehe);
-	swprintf(hehe,L"cameraPos.y = %f\n",-cameraPos.y);
-	OutputDebugString(hehe);
-	swprintf(hehe,L"cameraPos.z = %f\n",-cameraPos.z);
-	OutputDebugString(hehe);
-	XMMATRIX skyBoxPos = XMMatrixTranslation(-eyePos.f[0],-eyePos.f[1],-eyePos.f[2]);
+	//wchar_t hehe[128];
+	//swprintf(hehe,L"===============\ncameraPos.x = %f\n",-cameraPos.x);
+	//OutputDebugString(hehe);
+	//swprintf(hehe,L"cameraPos.y = %f\n",-cameraPos.y);
+	//OutputDebugString(hehe);
+	//swprintf(hehe,L"cameraPos.z = %f\n",-cameraPos.z);
+	//OutputDebugString(hehe);
+	XMMATRIX skyBoxPos = XMMatrixTranslation(eyePos.f[0],eyePos.f[1],eyePos.f[2]);
 	//XMMATRIX skyBoxPos = XMMatrixTranslation(-1.0,1.0,-1.0);
 	constSpace.WVP = XMMatrixTranspose(worldSpace * XMMatrixScaling(5.0f,5.0f,5.0f) * skyBoxPos * viewSpace * projectionMatrix);
 	constSpace.worldSpace = skyBoxPos;
@@ -1053,7 +1053,7 @@ void DrawScene()
 	d3dDeviceContext->ClearDepthStencilView(depthStencilView,D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
 	
 //画天空盒
-	//DrawSkyBox();
+	DrawSkyBox();
 //画两个立方体
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
@@ -1124,74 +1124,33 @@ void DetectInput(double time)
 	mouseDevice->GetDeviceState(sizeof(DIMOUSESTATE),&mouseState);
 	keyboardDevice->GetDeviceState(sizeof(keyboardState),&keyboardState);
 	
-	//if(keyboardState[DIK_UP] & 0x80)
-	//{
-	//	//OutputDebugString(L"!!UP");
-	//	cameraRotVertical += 0.785f * float(time);
-	//	if(cameraRotVertical > 0.785f)cameraRotVertical = 0.785f;
-	//}
-	//if(keyboardState[DIK_DOWN] & 0x80)
-	//{
-	//	//OutputDebugString(L"!!DOWN");
-	//	cameraRotVertical -= 0.785f * float(time);
-	//	if(cameraRotVertical < -0.785f)cameraRotVertical = -0.785f;
-	//}
-	//if(keyboardState[DIK_LEFT] & 0x80)
-	//{
-	//	//OutputDebugString(L"!!LEFT");
-	//	cameraRotHorizontal += 0.785f * float(time);
-	//	if(cameraRotHorizontal > 0.785f)cameraRotHorizontal = 0.785f;
-	//}
-	//if(keyboardState[DIK_RIGHT] & 0x80)
-	//{
-	//	//OutputDebugString(L"!!RIGHT");
-	//	cameraRotHorizontal -= 0.785f * float(time);
-	//	if(cameraRotHorizontal < -0.785f)cameraRotHorizontal = -0.785f;
-	//}
-	//viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos) * XMMatrixRotationAxis(XMVectorSet(0,1,0,0),cameraRotHorizontal) * XMMatrixRotationAxis(XMVectorSet(1,0,0,0),cameraRotVertical);
-
-	
-	//static int i = 0;
-	//static XMMATRIX viewSpaceTemp;
-	//if(i == 0)
-	//{
-	//	viewSpaceTemp = viewSpace;
-	//	i = 1;
-	//}
-	
-	//viewSpaceTemp *= XMMatrixRotationAxis(XMVectorSet(0,1,0,0),mouseState.lX*-0.001f);
-	cameraRotHorizontal -= mouseState.lX*0.001f;
+	cameraRotHorizontal += mouseState.lX*0.001f;
 	if(cameraRotHorizontal < -6.2832f || cameraRotHorizontal > 6.2832f)cameraRotHorizontal = fmod(cameraRotHorizontal,6.2832f);
-	cameraRotVertical -= mouseState.lY*0.001f;
+	cameraRotVertical += mouseState.lY*0.001f;
 	if(cameraRotVertical < -6.2832f || cameraRotVertical > 6.2832f)cameraRotVertical = fmod(cameraRotVertical,6.2832f);
-	cameraDir.v = XMVector3TransformCoord(				\
-		XMVector3TransformCoord(						\
-			XMVectorSet(0.0f,0.0f,1.0f,1.0f),			\
-			XMMatrixRotationY(cameraRotHorizontal)),	\
-		XMMatrixRotationX(cameraRotVertical));
-	cameraDir.v = XMVector3Normalize(cameraDir);
 
+	cameraDir.v = XMVector3TransformCoord(XMVectorSet(0.0f,0.0f,1.0f,1.0f),XMMatrixRotationY(cameraRotHorizontal));
+
+	cameraDir.v = XMVector3TransformCoord(cameraDir.v,XMMatrixRotationAxis(XMVectorSet(cameraDir.f[2],0.0f,-cameraDir.f[0],1.0f),cameraRotVertical));
+	cameraDir.v = XMVector3Normalize(cameraDir);
+	
+	float speed = 5 * float(time);
 	if(keyboardState[DIK_W] & 0x80)
 	{
-		//viewSpaceTemp *= XMMatrixTranslation(0.0f,0.0f,-1.0f * float(time));
-		eyePos.v = XMVector3Transform(eyePos,XMMatrixTranslation(cameraDir.f[0] * float(time),eyePos.f[1],cameraDir.f[2] * float(time)));
+		eyePos.v = XMVector3Transform(eyePos,XMMatrixTranslation(cameraDir.f[0] * speed,0,cameraDir.f[2] * speed));
 	}
 	if(keyboardState[DIK_S] & 0x80)
 	{
-		//viewSpaceTemp *= XMMatrixTranslation(0.0f,0.0f,1.0f * float(time));
-		eyePos.v = XMVector3Transform(eyePos,XMMatrixTranslation(-cameraDir.f[0] * float(time),eyePos.f[1],-cameraDir.f[2] * float(time)));
+		eyePos.v = XMVector3Transform(eyePos,XMMatrixTranslation(-cameraDir.f[0] * speed,0,-cameraDir.f[2] * speed));
 	}
 	if(keyboardState[DIK_A] & 0x80)
 	{
-		//viewSpaceTemp *= XMMatrixTranslation(1.0f * float(time),0.0f,0.0f);
-		eyePos.v = XMVector3Transform(eyePos,XMMatrixTranslation(-cameraDir.f[2] * float(time),eyePos.f[1],cameraDir.f[0] * float(time)));
+		eyePos.v = XMVector3Transform(eyePos,XMMatrixTranslation(-cameraDir.f[2] * speed,0,cameraDir.f[0] * speed));
 	}
 	if(keyboardState[DIK_D] & 0x80)
 	{
-		//viewSpaceTemp *= XMMatrixTranslation(-1.0f * float(time),0.0f,0.0f);
-		eyePos.v = XMVector3Transform(eyePos,XMMatrixTranslation(cameraDir.f[2] * float(time),eyePos.f[1],-cameraDir.f[0] * float(time)));
+		eyePos.v = XMVector3Transform(eyePos,XMMatrixTranslation(cameraDir.f[2] * speed,0,-cameraDir.f[0] * speed));
 	}
 	focusPos.v = eyePos.v + cameraDir.v;
-	//viewSpace = viewSpaceTemp * XMMatrixRotationAxis(XMVectorSet(1,0,0,0),cameraRotVertical);
 	viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
 }
