@@ -184,6 +184,7 @@ ID3D11Texture2D * skyBoxTexture;
 ID3D11ShaderResourceView * shaderResourceView_skyBox;
 ID3D11Buffer* skyBoxVertBuffer;
 ID3D11Buffer* skyBoxIndexBuffer;
+ID3D11DepthStencilState  *skyboxDepthStencilState;
 
 
 //time
@@ -505,7 +506,6 @@ void DirectxInit()
 	d3dDevice->CreateDepthStencilView(depthStencilTexture,NULL,&depthStencilView);
 
 	d3dDeviceContext->OMSetRenderTargets(1,&renderTargetView,depthStencilView);
-
 }
 
 void D2D_init(IDXGIAdapter1 *Adapter)
@@ -772,37 +772,7 @@ void SkyBoxInit()
 	HR(hr);
 
 	Vertex skyBoxVertex[] = 
-	{
-		//{skyBox0,leftUp,XMFLOAT3(0.0f,0.0f,-1.0f)},
-		//{skyBox1,rightUp,XMFLOAT3(0.0f,0.0f,-1.0f)},
-		//{skyBox2,leftDown,XMFLOAT3(0.0f,0.0f,-1.0f)},
-		//{skyBox3,rightDown,XMFLOAT3(0.0f,0.0f,-1.0f)},
-	
-		//{skyBox4,leftUp,XMFLOAT3(-1.0f,0.0f,0.0f)},
-		//{skyBox0,rightUp,XMFLOAT3(-1.0f,0.0f,0.0f)},
-		//{skyBox6,leftDown,XMFLOAT3(-1.0f,0.0f,0.0f)},
-		//{skyBox2,rightDown,XMFLOAT3(-1.0f,0.0f,0.0f)},
-	
-		//{skyBox4,leftUp,XMFLOAT3(0.0f,1.0f,0.0f)},
-		//{skyBox5,rightUp,XMFLOAT3(0.0f,1.0f,0.0f)},
-		//{skyBox0,leftDown,XMFLOAT3(0.0f,1.0f,0.0f)},
-		//{skyBox1,rightDown,XMFLOAT3(0.0f,1.0f,0.0f)},
-	
-		//{skyBox1,leftUp,XMFLOAT3(1.0f,0.0f,0.0f)},
-		//{skyBox5,rightUp,XMFLOAT3(1.0f,0.0f,0.0f)},
-		//{skyBox3,leftDown,XMFLOAT3(1.0f,0.0f,0.0f)},
-		//{skyBox7,rightDown,XMFLOAT3(1.0f,0.0f,0.0f)},
-	
-		//{skyBox7,leftUp,XMFLOAT3(0.0f,-1.0f,0.0f)},
-		//{skyBox6,rightUp,XMFLOAT3(0.0f,-1.0f,0.0f)},
-		//{skyBox3,leftDown,XMFLOAT3(0.0f,-1.0f,0.0f)},
-		//{skyBox2,rightDown,XMFLOAT3(0.0f,-1.0f,0.0f)},
-	
-		//{skyBox5,leftUp,XMFLOAT3(0.0f,0.0f,1.0f)},
-		//{skyBox4,rightUp,XMFLOAT3(0.0f,0.0f,1.0f)},
-		//{skyBox7,leftDown,XMFLOAT3(0.0f,0.0f,1.0f)},
-		//{skyBox6,rightDown,XMFLOAT3(0.0f,0.0f,1.0f)},
-		
+	{	
 		{XMFLOAT3(-1.0,1.0,1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)},
 		{XMFLOAT3(1.0,1.0,1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)},
 		{XMFLOAT3(-1.0,-1.0,1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)},
@@ -879,6 +849,14 @@ void SkyBoxInit()
 
 	hr = d3dDevice->CreateBuffer(&indexBufferDesc,&indexData,&skyBoxIndexBuffer);
 	HR(hr);
+
+//设置深度模板状态（是为了让天空盒在最远的深度上能够显示，所以深度方法要设置成 D3D11_COMPARISON_LESS_EQUAL 小等于）
+	D3D11_DEPTH_STENCIL_DESC dssDesc;
+	ZeroMemory(&dssDesc, sizeof(D3D11_DEPTH_STENCIL_DESC));
+	dssDesc.DepthEnable = true;
+	dssDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+	dssDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
+	d3dDevice->CreateDepthStencilState(&dssDesc, &skyboxDepthStencilState);
 }
 void IAInitText()
 {
@@ -1032,20 +1010,14 @@ void DrawSkyBox()
 	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
 	d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
 	
-	//wchar_t hehe[128];
-	//swprintf(hehe,L"===============\ncameraPos.x = %f\n",-cameraPos.x);
-	//OutputDebugString(hehe);
-	//swprintf(hehe,L"cameraPos.y = %f\n",-cameraPos.y);
-	//OutputDebugString(hehe);
-	//swprintf(hehe,L"cameraPos.z = %f\n",-cameraPos.z);
-	//OutputDebugString(hehe);
 	XMMATRIX skyBoxPos = XMMatrixTranslation(eyePos.f[0],eyePos.f[1],eyePos.f[2]);
-	//XMMATRIX skyBoxPos = XMMatrixTranslation(-1.0,1.0,-1.0);
 	constSpace.WVP = XMMatrixTranspose(worldSpace * XMMatrixScaling(5.0f,5.0f,5.0f) * skyBoxPos * viewSpace * projectionMatrix);
 	constSpace.worldSpace = skyBoxPos;
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 
+	d3dDeviceContext->OMSetDepthStencilState(skyboxDepthStencilState,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
+	d3dDeviceContext->OMSetDepthStencilState(NULL,0);
 }
 void DrawScene()
 {
@@ -1127,7 +1099,14 @@ void DetectInput(double time)
 	cameraRotHorizontal += mouseState.lX*0.001f;
 	if(cameraRotHorizontal < -6.2832f || cameraRotHorizontal > 6.2832f)cameraRotHorizontal = fmod(cameraRotHorizontal,6.2832f);
 	cameraRotVertical += mouseState.lY*0.001f;
-	if(cameraRotVertical < -6.2832f || cameraRotVertical > 6.2832f)cameraRotVertical = fmod(cameraRotVertical,6.2832f);
+	if(cameraRotVertical < -1.5707f || cameraRotVertical > 1.5707f)
+	{
+		if(mouseState.lY > 0)
+			cameraRotVertical = 1.5707f;
+		else
+			cameraRotVertical = -1.5707f;
+			//cameraRotVertical = fmod(cameraRotVertical,6.2832f);
+	}
 
 	cameraDir.v = XMVector3TransformCoord(XMVectorSet(0.0f,0.0f,1.0f,1.0f),XMMatrixRotationY(cameraRotHorizontal));
 
