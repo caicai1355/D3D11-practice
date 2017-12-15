@@ -106,10 +106,20 @@ struct Light
 struct PointLight
 {
 	XMFLOAT3 pos;
-	float pad_1;
+	float range;
 	XMFLOAT4 lightIntensity;
 	XMFLOAT3 attr;
 	float pad_2;
+};
+struct SpotLight
+{
+	XMFLOAT3 pos;
+	float range;
+	XMFLOAT4 lightIntensity;
+	XMFLOAT3 distanceAttr;
+	float pad;
+	XMFLOAT3 dir;
+	float deflectAttr;
 };
 struct ConstLight
 {
@@ -118,6 +128,10 @@ struct ConstLight
 struct ConstPointLight
 {
 	PointLight pointLight;
+};
+struct ConstSpotLight
+{
+	SpotLight spotLight;
 };
 
 HWND hwnd;
@@ -137,9 +151,11 @@ XMMATRIX projectionMatrix;
 ID3D11Buffer *constBufferSpace;
 ID3D11Buffer *constBufferLight;
 ID3D11Buffer *constBufferPointLight;
+ID3D11Buffer *constBufferSpotLight;
 ConstSpace constSpace;
 ConstLight constLight;
 ConstPointLight constPointLight;
+ConstSpotLight constSpotLight;
 ID3D11ShaderResourceView * shaderResourceView_brain;
 ID3D11ShaderResourceView * shaderResourceView_grass;
 ID3D11SamplerState * samplerState[2];	//1、重复	2、不重复
@@ -154,7 +170,7 @@ XMVECTORF32 upPos = {0.0f,1.0f,0.0f,0.0f};
 FLOAT cameraRotHorizontal = 0.0f;
 FLOAT cameraRotVertical = 0.0f;
 XMVECTORF32 cameraDir;
-XMFLOAT3 cameraPos;
+//XMFLOAT3 cameraPos;
 
 //textD2D
 ID3D10Device1 * d3d10Device;
@@ -587,7 +603,7 @@ bool RenderPipeline()
 //创建着色器（顶点着色器和像素着色器）
 	hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "VS", "vs_4_0", 0, 0, 0, &VS_Buffer, 0, 0);
 	HR(hr);
-	hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "PS", "ps_4_0", 0, 0, 0, &PS_Buffer, 0, 0);
+	hr = D3DX11CompileFromFile(L"Effects.fx", 0, 0, "PS", "ps_4_0", D3D11_SHADER_DEBUG_REG_INTERFACE_POINTERS, 0, 0, &PS_Buffer, 0, 0);
 	HR(hr);
 	
 	hr = d3dDevice->CreateVertexShader(VS_Buffer->GetBufferPointer(),VS_Buffer->GetBufferSize(),NULL,&VS);
@@ -700,7 +716,7 @@ bool RenderPipeline()
 	constLight.light.ambientIntensity = XMFLOAT4(0.2f,0.2f,0.2f,0.2f);
 	//constLight.light.ambientIntensity = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);	//这个其实是环境光，就先合并到平行光里了
 	constLight.light.lightIntensity = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
-	constLight.light.dir = XMFLOAT3(-5.3f,1.3f,-1.0f);
+	constLight.light.dir = XMFLOAT3(5.3f,-1.3f,1.0f);
 
 	d3dDeviceContext->UpdateSubresource(constBufferLight,0,NULL,&constLight,0,0);
 
@@ -710,11 +726,27 @@ bool RenderPipeline()
 	d3dDeviceContext->PSSetConstantBuffers(2,1,&constBufferPointLight);
 
 	constPointLight.pointLight.attr = XMFLOAT3(0.0f,0.5f,0.0f);
-	constPointLight.pointLight.pad_1 = constPointLight.pointLight.pad_2 = 0.0f;
+	constPointLight.pointLight.range = 100.0f;
+	constPointLight.pointLight.pad_2 = 0.0f;
 	constPointLight.pointLight.pos = XMFLOAT3(1.3f,1.2f,-1.0f);
 	constPointLight.pointLight.lightIntensity = XMFLOAT4(1.0f,0.0f,0.0f,1.0f);
 	
 	d3dDeviceContext->UpdateSubresource(constBufferPointLight,0,NULL,&constPointLight,0,0);
+
+	//聚光灯光
+	constBufferDesc.ByteWidth = sizeof(ConstSpotLight);
+	d3dDevice->CreateBuffer(&constBufferDesc,NULL,&constBufferSpotLight);
+	d3dDeviceContext->PSSetConstantBuffers(3,1,&constBufferSpotLight);
+
+	constSpotLight.spotLight.distanceAttr = XMFLOAT3(0.0f,0.5f,0.0f);
+	constSpotLight.spotLight.range = 5.0f;
+	constSpotLight.spotLight.pad = 0.0f;
+	constSpotLight.spotLight.pos = XMFLOAT3(eyePos.f);
+	constSpotLight.spotLight.dir = XMFLOAT3(cameraDir.f);
+	constSpotLight.spotLight.lightIntensity = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
+	constSpotLight.spotLight.deflectAttr = 5.0f;
+	
+	d3dDeviceContext->UpdateSubresource(constBufferSpotLight,0,NULL,&constSpotLight,0,0);
 
 //纹理部分
 	HR(D3DX11CreateShaderResourceViewFromFile(d3dDevice,L"braynzar.jpg",NULL,NULL,&shaderResourceView_brain,NULL));
@@ -1036,6 +1068,9 @@ void DrawScene()
 	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_brain);
 	d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
 	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
+	constSpotLight.spotLight.pos = XMFLOAT3(eyePos.f);
+	constSpotLight.spotLight.dir = XMFLOAT3(cameraDir.f);
+	d3dDeviceContext->UpdateSubresource(constBufferSpotLight,0,NULL,&constSpotLight,0,0);
 
 	XMMATRIX ractangle_1 = XMMatrixRotationAxis(XMVectorSet(0,1,0,0),rot2) * XMMatrixTranslation(2,0,0);
 	

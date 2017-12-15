@@ -7,8 +7,18 @@ struct Light
 struct PointLight
 {
 	float3 pos;
+	float range;
 	float4 lightIntensity;
 	float3 attr;
+};
+struct SpotLight
+{
+	float3 pos;
+	float range;
+	float4 lightIntensity;
+	float3 distanceAttr;
+	float3 dir;
+	float deflectAttr;
 };
 
 cbuffer CBufferMatrix : register(b0)
@@ -25,6 +35,11 @@ cbuffer CBufferLight : register(b1)
 cbuffer CBufferPointLight : register(b2)
 {
 	PointLight pointLight;
+};
+
+cbuffer CBufferSpotLight : register(b3)
+{
+	SpotLight spotLight;
 };
 
 Texture2D ObjTexture;
@@ -68,19 +83,37 @@ float4 PS(VS_OUTPUT input) : SV_TARGET
 	//return float4(0.0f, 0.0f, 1.0f, 1.0f);
     //return float4(ObjTexture.Sample( ObjSamplerState, input.Texture).x,ObjTexture.Sample( ObjSamplerState, input.Texture).y,ObjTexture.Sample( ObjSamplerState, input.Texture).z,0.2f);
 	//clip(temp.a - 0.25);
-	float d;
-	float3 pointLightVector;
+	float PointD,SpotD;
+	float3 pointLightVector,spotLightVector;
+	float3 norLightDir,norSpotLightDir;
 
 	float4 temp = ObjTexture.Sample( ObjSamplerState, input.Texture);
+	input.Normal = normalize(input.Normal);
+	//ambient light
 	float4 color = light.ambientIntensity * temp;
-	color += light.lightIntensity * temp * saturate(dot(normalize(light.dir),normalize(input.Normal)));
-
+	//directional light
+	norLightDir = normalize(light.dir);
+	color += light.lightIntensity * temp * saturate(dot(-norLightDir,input.Normal));
+	//point light
 	pointLightVector = pointLight.pos - input.WorldPos;
-	d = length(pointLightVector);
-	pointLightVector /= d;
-	color += pointLight.lightIntensity / (pointLight.attr[0] + pointLight.attr[1]*d + pointLight.attr[2]*d*d) * temp * saturate(dot(pointLightVector,normalize(input.Normal)));
-
+	PointD = length(pointLightVector);
+	if(PointD < pointLight.range)
+	{
+		pointLightVector /= PointD;
+		color += pointLight.lightIntensity / (pointLight.attr[0] + pointLight.attr[1]*PointD + pointLight.attr[2]*PointD*PointD) * temp * saturate(dot(pointLightVector,input.Normal));
+	}
+	//spot light
+	spotLightVector = spotLight.pos - input.WorldPos;
+	SpotD = length(spotLightVector);
+	if(SpotD < spotLight.range)
+	{
+		norSpotLightDir = normalize(spotLight.dir);
+		spotLightVector /= SpotD;
+		color += spotLight.lightIntensity / (spotLight.distanceAttr[0] + spotLight.distanceAttr[1]*SpotD + spotLight.distanceAttr[2]*SpotD*SpotD) * pow(max(dot(spotLightVector,-norSpotLightDir),0.0f),spotLight.deflectAttr) * temp * saturate(dot(spotLightVector,input.Normal));
+	}
+	
 	return color;
+	//return float4(1.0f,1.0f,1.0f,1.0f);
 	//return temp;
 }
 
