@@ -20,6 +20,7 @@
 #include <exception>
 #include <stdio.h>
 #include <math.h>
+#include <vector>
 ///////////////**************dx_input**************////////////////////
 #include <D3D10_1.h>
 #include <DXGI.h>
@@ -28,6 +29,8 @@
 #include <dwrite.h>
 ///////////////**************dx_input**************////////////////////
 #include <dinput.h>
+///////////////**************load_model**************////////////////////
+#include <fstream>
 
 #ifdef _DEBUG
 #include <comdef.h>
@@ -84,6 +87,27 @@
 //#define HR_DEBUG(hr) (hr)
 
 const TCHAR ClassName[]=TEXT("dx_world");
+
+struct SurfaceMaterial
+{
+    std::wstring matName;
+    XMFLOAT4 difColor;
+    int texArrayIndex;	//从0开始
+    bool hasTexture;	//是否使用texture
+    bool transparent;	//是否需要blend
+};
+struct VertexMsgObjIndex	//从1开始，0表示没有该值
+{
+	DWORD verIdx;
+	DWORD texCoorIdx;
+	DWORD normalIdx;
+};
+
+struct materialMsg
+{
+	std::wstring mtlName;
+	std::wstring TextureFileName;
+};
 
 struct Vertex
 {
@@ -357,6 +381,7 @@ bool InitDirectInput(HINSTANCE hInstance);
 void DetectInput(double time);
 
 void SkyBoxInit();
+bool LoadObjModel();
 
 void UpdateScene(double currentFrameTime);
 void DrawScene();
@@ -594,6 +619,277 @@ void D2D_init(IDXGIAdapter1 *Adapter)
 
 	d3d10Device->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_POINTLIST);	
 	d3dDevice->CreateShaderResourceView(myTestTexture,NULL,&shaderResourceView_text);
+}
+
+bool LoadObjModel(std::wstring filename)
+{
+	std::vector<XMFLOAT3> vertexVec;	//obj文件对应排列下来的vertex信息
+	std::vector<XMFLOAT3> texCooVec;	//obj文件对应排列下来的texture coordinate信息
+	std::vector<XMFLOAT3> nornamVec;	//obj文件对应排列下来的normal信息
+	std::vector<DWORD> indexVec;		//vertMsgVec里面的vertex信息对应的index序列（这就是最终的用来构造index的序列）
+	std::vector<std::wstring> mtlLibVec;	//obj文件里引用的lib
+	std::vector<SurfaceMaterial> surMetVec;		//每个group对应的一些信息
+	std::vector<VertexMsgObjIndex> vertMsgVec;	//obj文件里 f 字段的组合结构体以不重复的形式保存的vertex信息序列
+	std::vector<materialMsg> mtlVec;	//mtl里的每一个mtl的属性结构体
+	std::wifstream modelFile(filename);
+
+	int indexIndex = 0;	//记录当前提取到了第几个 f (index)
+	int groupIndex = 0;	//记录当前提取到了第几个 g (group)
+
+	std::wstring wstrTemp;
+	SurfaceMaterial surMetTemp;
+	VertexMsgObjIndex verMsgObjTemp;
+	materialMsg mtlMsgTemp;
+	DWORD verTemp;
+	DWORD texCoorTemp;
+	DWORD normalTemp;
+	bool flagTemp;
+
+	if(modelFile)
+	{
+		wchar_t keyChar;
+		while(modelFile)
+		{
+			keyChar = modelFile.get();
+			switch(keyChar)
+			{
+			case '#':
+				while(modelFile.get() != '\n' && modelFile);
+				break;
+			case 'v':
+				keyChar = modelFile.get();
+				switch(keyChar)
+				{
+				case ' ':	//vertex
+					{
+						float vx,vy,vz;
+						modelFile >> vx >> vy >> vz;
+						vertexVec.push_back(XMFLOAT3(vx,vy,vz));
+						break;
+					}
+				case 't':	//texture coord
+					{
+						float vx,vy,vz;
+						modelFile >> vx >> vy >> vz;
+						texCooVec.push_back(XMFLOAT3(vx,vy,vz));
+						break;
+					}
+					break;
+				case 'n':	//normal
+					{
+						float vx,vy,vz;
+						modelFile >> vx >> vy >> vz;
+						nornamVec.push_back(XMFLOAT3(vx,vy,vz));
+						break;
+					}
+					break;
+				}
+				while(modelFile.get() != '\n' && modelFile);
+				break;
+			case 'g':
+				surMetTemp.hasTexture = false;
+				surMetTemp.matName == L"";
+				surMetTemp.texArrayIndex = indexIndex;
+				surMetTemp.transparent = false;
+				surMetVec.push_back(surMetTemp);
+				groupIndex++;
+				while(modelFile.get() != '\n' && modelFile);
+				break;
+			case 'u':	//usemtl
+				if(modelFile.get() == 's')
+				{
+					if(modelFile.get() == 'e')
+					{
+						if(modelFile.get() == 'm')
+						{
+							if(modelFile.get() == 't')
+							{
+								if(modelFile.get() == 'l')
+								{
+									if(modelFile.get() == ' ')
+									{
+										modelFile >> wstrTemp; //Get next type (string)
+										surMetVec.back().matName = wstrTemp;
+									}
+								}
+							}
+						}
+					}
+				}
+				while(modelFile.get() != '\n' && modelFile);
+				break;
+			case 'm':	//mtllib
+				if(modelFile.get() == 't')
+				{
+					if(modelFile.get() == 'l')
+					{
+						if(modelFile.get() == 'l')
+						{
+							if(modelFile.get() == 'i')
+							{
+								if(modelFile.get() == 'b')
+								{
+									if(modelFile.get() == ' ')
+									{
+										modelFile >> wstrTemp; //Get next type (string)
+										flagTemp = false;	//是否存在已有的mtl
+										for(int i = 0,lenTemp = mtlLibVec.size();i < lenTemp;i++)
+										{
+											if(mtlLibVec[i] == wstrTemp)
+											{
+												flagTemp = true;
+												break;
+											}
+										}
+										if(flagTemp == false)
+										{
+											mtlLibVec.push_back(wstrTemp);
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+				while(modelFile.get() != '\n' && modelFile);
+				break;
+			case 'f':	//暂不考虑超过3个的情况
+				if(indexIndex == 0 && surMetVec.empty())	//如果开始没有group，则这一部分应该也是要作为一个group的
+				{	
+					surMetTemp.hasTexture = false;
+					surMetTemp.matName = L"";
+					surMetTemp.texArrayIndex = 0;
+					surMetTemp.transparent = false;
+					surMetVec.push_back(surMetTemp);
+					groupIndex++;
+				}
+				modelFile.get();
+				for(int i = 0;i < 3;i++)	//循环获取3个vertex的属性
+				{
+					while(modelFile.get() == ' ');	//过滤开始的空格
+					wstrTemp = L"";
+					do
+					{
+						wstrTemp += keyChar;
+						keyChar = modelFile.get();
+					}
+					while(keyChar != ' ');	//获取vertex属性存到字符串中
+					verTemp = 0;
+					texCoorTemp = 0;
+					normalTemp = 0;
+					std::wstringstream sstreamTemp(wstrTemp);
+					sstreamTemp >> verTemp;
+					for(unsigned i = 0,whichValue = 0,lenTemp = wstrTemp.length();i < lenTemp;i++)	//构造vertex字符串流并在解析后存到3个变量中
+					{
+						if(wstrTemp.c_str()[i] == '/')
+						{
+							sstreamTemp.get();
+							whichValue++;
+							if(i < wstrTemp.length() - 1 && wstrTemp.c_str()[i+1] >= '0' && wstrTemp.c_str()[i+1] <= '9' && whichValue == 1)
+							{
+								sstreamTemp >> texCoorTemp;
+							}
+							if(i < wstrTemp.length() - 1 && wstrTemp.c_str()[i+1] >= '0' && wstrTemp.c_str()[i+1] <= '9' && whichValue == 2)
+							{
+								sstreamTemp >> normalTemp;
+							}
+						}
+					}
+					flagTemp = false;
+					for(DWORD i = 0,lenTemp = vertMsgVec.size();i < lenTemp;i++)	//判断是否已经有了一样的vertex，有的话就直接将对应index赋值过去
+					{
+						if(vertMsgVec[i].verIdx == verTemp && vertMsgVec[i].texCoorIdx == texCoorTemp && vertMsgVec[i].normalIdx == normalTemp)
+						{
+							flagTemp = true;
+							indexVec.push_back(i);
+						}
+					}
+					if(flagTemp == false)	//没有的话就创建一个VertexMsgObjIndex结构体并添加新数据，然后将对应index赋值过去
+					{
+						verMsgObjTemp.verIdx = verTemp;
+						verMsgObjTemp.texCoorIdx = texCoorTemp;
+						verMsgObjTemp.normalIdx = normalTemp;
+						vertMsgVec.push_back(verMsgObjTemp);
+						indexVec.push_back(vertMsgVec.size()-1);
+					}
+					indexIndex++;
+				}
+				while(modelFile.get() != '\n' && modelFile);
+				break;
+			case 's':
+				while(modelFile.get() != '\n' && modelFile);
+				break;
+			case 'o':
+				while(modelFile.get() != '\n' && modelFile);
+				break;
+			}
+		}
+
+		//循环读取mtl文件
+		for(unsigned i = 0,len = mtlLibVec.size();i < len;i++)
+		{
+			std::wifstream mtlFile(mtlLibVec[i]);
+			if(mtlFile)
+			{
+				wchar_t keyChar;
+				while(mtlFile)
+				{
+					keyChar = mtlFile.get();
+					switch(keyChar)
+					{
+					case 'n':
+						if(mtlFile.get() == 'e')
+						{
+							if(mtlFile.get() == 'w')
+							{
+								if(mtlFile.get() == 'm')
+								{
+									if(mtlFile.get() == 't')
+									{
+										if(mtlFile.get() == 'l')
+										{
+											if(mtlFile.get() == ' ')
+											{ 
+												mtlFile >> mtlMsgTemp.mtlName;
+												mtlVec.push_back(mtlMsgTemp);
+											}
+										}
+									}
+								}
+							}
+						}
+						while(mtlFile.get() != '\n' && mtlFile);
+						break;
+					case 'N':
+						break;
+					case 'd':
+						break;
+					case 'm':
+						break;
+					case 'T':
+						break;
+					case 'K':
+						break;
+					case 'i':
+						break;
+					default:
+						while(mtlFile.get() != '\n' && mtlFile);
+						break;
+					}
+				}
+			}
+		}
+
+		return true;
+	}
+	else
+	{
+		std::wstring errorString = L"open \"";
+		errorString += filename;
+		errorString += L"\" error!";
+		MessageBox(hwnd,errorString.c_str(),L"error",MB_OK);
+		return false;
+	}
 }
 
 bool RenderPipeline()
@@ -1058,20 +1354,29 @@ void DrawScene()
 	
 //画天空盒
 	DrawSkyBox();
-//画两个立方体
+
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
 	d3dDeviceContext->IASetVertexBuffers(0,1,&squareVertBuffer,&stride,&offset);
 	d3dDeviceContext->IASetIndexBuffer(squareIndexBuffer,DXGI_FORMAT_R32_UINT,0);
 	d3dDeviceContext->VSSetShader(VS,0,0);
 	d3dDeviceContext->PSSetShader(PS,0,0);
-	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_brain);
 	d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
 	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
 	constSpotLight.spotLight.pos = XMFLOAT3(eyePos.f);
 	constSpotLight.spotLight.dir = XMFLOAT3(cameraDir.f);
 	d3dDeviceContext->UpdateSubresource(constBufferSpotLight,0,NULL,&constSpotLight,0,0);
-
+	
+//画草地
+	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * projectionMatrix);
+	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
+	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
+	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_grass);
+	d3dDeviceContext->DrawIndexed(6,36,0);
+//画两个立方体
+	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_brain);
+	float blendFactor[] = {0.75f, 0.75f, 0.75f, 1.0f};
+	d3dDeviceContext->OMSetBlendState(blendState,blendFactor,0xffffffff);
 	XMMATRIX ractangle_1 = XMMatrixRotationAxis(XMVectorSet(0,1,0,0),rot2) * XMMatrixTranslation(2,0,0);
 	
 	d3dDeviceContext->RSSetState(rasterState_2);
@@ -1097,13 +1402,10 @@ void DrawScene()
 	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
-//画草地
-	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_grass);
-	d3dDeviceContext->DrawIndexed(42,0,0);
 
 //显示文本
 	wchar_t timeTemp[120];
-	swprintf(timeTemp,L"%d",fps);
+	swprintf_s(timeTemp,L"%d",fps);
 	drawText(timeTemp);
 
 	d3dSwapChain->Present(0,0);
