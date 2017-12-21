@@ -36,15 +36,15 @@
 #include <comdef.h>
 #endif
 
-#define WIDTH 100
-#define HEIGHT 100 
-#define POS_X 1200 
-#define POS_Y 700
+//#define WIDTH 100
+//#define HEIGHT 100 
+//#define POS_X 1200 
+//#define POS_Y 700
 
-//#define WIDTH 500
-//#define HEIGHT 500 
-//#define POS_X 600 
-//#define POS_Y 200
+#define WIDTH 500
+#define HEIGHT 500 
+#define POS_X 600 
+#define POS_Y 200
 
 //#define LIGHT_TYPE_VERTEX_NORMAL
 #define LIGHT_TYPE_PLANE_NORMAL
@@ -1453,19 +1453,27 @@ void DetectInput(double time)
 	float speed = 5 * float(time);
 	if(keyboardState[DIK_W] & 0x80)
 	{
-		eyePos.v = XMVector3Transform(eyePos,XMMatrixTranslation(cameraDir.f[0] * speed,0,cameraDir.f[2] * speed));
+		XMVECTORF32 dirNormalized = {cameraDir.f[0],0.0f,cameraDir.f[2]};
+		dirNormalized.v = XMVector3Normalize(dirNormalized.v);
+		eyePos.v = XMVector3Transform(eyePos,XMMatrixTranslation(dirNormalized.f[0] * speed,0.0f,dirNormalized.f[2] * speed));
 	}
 	if(keyboardState[DIK_S] & 0x80)
 	{
-		eyePos.v = XMVector3Transform(eyePos,XMMatrixTranslation(-cameraDir.f[0] * speed,0,-cameraDir.f[2] * speed));
+		XMVECTORF32 dirNormalized = {cameraDir.f[0],0.0f,cameraDir.f[2]};
+		dirNormalized.v = XMVector3Normalize(dirNormalized.v);
+		eyePos.v = XMVector3Transform(eyePos,XMMatrixTranslation(-dirNormalized.f[0] * speed,0,-dirNormalized.f[2] * speed));
 	}
 	if(keyboardState[DIK_A] & 0x80)
 	{
-		eyePos.v = XMVector3Transform(eyePos,XMMatrixTranslation(-cameraDir.f[2] * speed,0,cameraDir.f[0] * speed));
+		XMVECTORF32 dirNormalized = {cameraDir.f[0],0.0f,cameraDir.f[2]};
+		dirNormalized.v = XMVector3Normalize(dirNormalized.v);
+		eyePos.v = XMVector3Transform(eyePos,XMMatrixTranslation(-dirNormalized.f[2] * speed,0,dirNormalized.f[0] * speed));
 	}
 	if(keyboardState[DIK_D] & 0x80)
 	{
-		eyePos.v = XMVector3Transform(eyePos,XMMatrixTranslation(cameraDir.f[2] * speed,0,-cameraDir.f[0] * speed));
+		XMVECTORF32 dirNormalized = {cameraDir.f[0],0.0f,cameraDir.f[2]};
+		dirNormalized.v = XMVector3Normalize(dirNormalized.v);
+		eyePos.v = XMVector3Transform(eyePos,XMMatrixTranslation(dirNormalized.f[2] * speed,0,-dirNormalized.f[0] * speed));
 	}
 	focusPos.v = eyePos.v + cameraDir.v;
 	viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
