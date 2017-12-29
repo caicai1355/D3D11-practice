@@ -36,15 +36,15 @@
 #include <comdef.h>
 #endif
 
-//#define WIDTH 100
-//#define HEIGHT 100 
-//#define POS_X 1200 
-//#define POS_Y 700
+#define WIDTH 100
+#define HEIGHT 100 
+#define POS_X 1200 
+#define POS_Y 700
 
-#define WIDTH 500
-#define HEIGHT 500 
-#define POS_X 600 
-#define POS_Y 200
+//#define WIDTH 500
+//#define HEIGHT 500 
+//#define POS_X 600 
+//#define POS_Y 200
 
 //#define LIGHT_TYPE_VERTEX_NORMAL
 #define LIGHT_TYPE_PLANE_NORMAL
@@ -90,7 +90,7 @@ const TCHAR ClassName[]=TEXT("dx_world");
 
 struct SurfaceMaterial
 {
-    std::wstring matName;
+    std::wstring matName;	//usemtl 的名字
     XMFLOAT4 difColor;
     int texArrayIndex;	//从0开始
     bool hasTexture;	//是否使用texture
@@ -105,8 +105,14 @@ struct VertexMsgObjIndex	//从1开始，0表示没有该值
 
 struct materialMsg
 {
-	std::wstring mtlName;
+	std::wstring mtlName;	//newmtl 的名字
 	std::wstring TextureFileName;
+	XMFLOAT3 ka;
+	XMFLOAT3 kd;
+	XMFLOAT3 ks;
+	float transparent;	//透明度，0-1，1是完全不透明
+	bool hasTexture;	//是否使用texture
+	bool isTransparent;	//是否需要blend
 };
 
 struct Vertex
@@ -644,6 +650,7 @@ bool LoadObjModel(std::wstring filename)
 	DWORD texCoorTemp;
 	DWORD normalTemp;
 	bool flagTemp;
+	float floatTemp;
 
 	if(modelFile)
 	{
@@ -851,6 +858,13 @@ bool LoadObjModel(std::wstring filename)
 											if(mtlFile.get() == ' ')
 											{ 
 												mtlFile >> mtlMsgTemp.mtlName;
+												mtlMsgTemp.hasTexture = false;
+												mtlMsgTemp.ka = XMFLOAT3(0.0f,0.0f,0.0f);
+												mtlMsgTemp.kd = XMFLOAT3(0.0f,0.0f,0.0f);
+												mtlMsgTemp.ks = XMFLOAT3(0.0f,0.0f,0.0f);
+												mtlMsgTemp.TextureFileName = L"";
+												mtlMsgTemp.transparent = 0.0f;
+												mtlMsgTemp.isTransparent = false;
 												mtlVec.push_back(mtlMsgTemp);
 											}
 										}
@@ -860,17 +874,95 @@ bool LoadObjModel(std::wstring filename)
 						}
 						while(mtlFile.get() != '\n' && mtlFile);
 						break;
-					case 'N':
+					case 'K':
+						switch(mtlFile.get())
+						{
+						case 'a':
+							mtlFile >> mtlVec.back().ka.x;
+							mtlFile >> mtlVec.back().ka.y;
+							mtlFile >> mtlVec.back().ka.z;
+							break;
+						case 'd':
+							mtlFile >> mtlVec.back().ka.x;
+							mtlFile >> mtlVec.back().ka.y;
+							mtlFile >> mtlVec.back().ka.z;
+							mtlVec.back().kd.x = mtlVec.back().ka.x;
+							mtlVec.back().kd.y = mtlVec.back().ka.y;
+							mtlVec.back().kd.z = mtlVec.back().ka.z;
+							break;
+						case 's':
+							mtlFile >> mtlVec.back().ks.x;
+							mtlFile >> mtlVec.back().ks.y;
+							mtlFile >> mtlVec.back().ks.z;
+							break;
+						default:
+							break;
+						}
+						while(mtlFile.get() != '\n' && mtlFile);
 						break;
 					case 'd':
+						mtlFile >> floatTemp;
+						mtlVec.back().transparent = floatTemp;
+						if(floatTemp < 1.0f)
+						{
+							mtlVec.back().isTransparent = true;
+						}
+					case 'T':
+						switch(mtlFile.get())
+						{
+						case 'r':
+							mtlFile >> floatTemp;
+							mtlVec.back().transparent = 1 - floatTemp;
+							if(floatTemp > 0.0f)
+							{
+								mtlVec.back().isTransparent = true;
+							}
+							break;
+						case 'f':
+							break;
+						default:
+							break;
+						}
+						while(mtlFile.get() != '\n' && mtlFile);
 						break;
 					case 'm':
+						if(mtlFile.get() == 'a')
+						{
+							if(mtlFile.get() == 'p')
+							{
+								if(mtlFile.get() == '_')
+								{
+									keyChar = mtlFile.get();
+									if(keyChar == 'K')
+									{
+										keyChar = mtlFile.get();
+										if(keyChar == 'a')
+										{
+											mtlFile >> mtlVec.back().TextureFileName;
+										}
+										else if(keyChar == 'd')
+										{
+											mtlFile >> mtlVec.back().TextureFileName;
+										}
+									}
+									else if(keyChar == 'd')
+									{
+										//map_d
+									}
+								}
+							}
+						}
+						while(mtlFile.get() != '\n' && mtlFile);
 						break;
-					case 'T':
-						break;
-					case 'K':
+					case 'N':
+						while(mtlFile.get() != '\n' && mtlFile);
 						break;
 					case 'i':
+						while(mtlFile.get() != '\n' && mtlFile);
+						break;
+					case ' ':
+					case '\t':
+					case '\n':
 						break;
 					default:
 						while(mtlFile.get() != '\n' && mtlFile);
