@@ -36,15 +36,15 @@
 #include <comdef.h>
 #endif
 
-#define WIDTH 100
-#define HEIGHT 100 
-#define POS_X 1200 
-#define POS_Y 700
+//#define WIDTH 100
+//#define HEIGHT 100 
+//#define POS_X 1200 
+//#define POS_Y 700
 
-//#define WIDTH 500
-//#define HEIGHT 500 
-//#define POS_X 600 
-//#define POS_Y 200
+#define WIDTH 500
+#define HEIGHT 500 
+#define POS_X 600 
+#define POS_Y 200
 
 //#define LIGHT_TYPE_VERTEX_NORMAL
 #define LIGHT_TYPE_PLANE_NORMAL
@@ -1650,7 +1650,7 @@ void drawModelNonBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std:
 	d3dDeviceContext->IASetVertexBuffers(0,1,&vertBuffer,&stride,&offset);
 	d3dDeviceContext->IASetIndexBuffer(indexBuffer,DXGI_FORMAT_R32_UINT,0);
 	d3dDeviceContext->VSSetShader(VS,0,0);
-	d3dDeviceContext->RSSetState(rasterState_cwnc);
+	d3dDeviceContext->RSSetState(rasterState_cw);
 	d3dDeviceContext->PSSetShader(PS,0,0);
 	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
 	d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
@@ -1696,7 +1696,7 @@ void drawModelBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::ve
 	d3dDeviceContext->IASetVertexBuffers(0,1,&vertBuffer,&stride,&offset);
 	d3dDeviceContext->IASetIndexBuffer(indexBuffer,DXGI_FORMAT_R32_UINT,0);
 	d3dDeviceContext->VSSetShader(VS,0,0);
-	d3dDeviceContext->RSSetState(rasterState_cwnc);
+	d3dDeviceContext->RSSetState(rasterState_cw);
 	d3dDeviceContext->PSSetShader(PS,0,0);
 	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
 	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * projectionMatrix);
