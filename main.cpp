@@ -88,13 +88,14 @@
 
 const TCHAR ClassName[]=TEXT("dx_world");
 
-struct SurfaceMaterial
+struct SurfaceMaterial	//group
 {
     std::wstring matName;	//usemtl 的名字
-    XMFLOAT4 difColor;
-    int texArrayIndex;	//从0开始
-    bool hasTexture;	//是否使用texture
-    bool transparent;	//是否需要blend
+    XMFLOAT4 difColor;	//mtl文件中的 ka/kd 项和 d/tr 项的结合
+    int texArrayIndex;	//VertexMsgObjIndex的vector的index，从0开始
+    bool hasTexture;	//mtl文件中是否使用texture
+    bool isTransparent;	//mtl文件中是否需要blend
+	ID3D11ShaderResourceView * shaderResourceView;
 };
 struct VertexMsgObjIndex	//从1开始，0表示没有该值
 {
@@ -103,16 +104,16 @@ struct VertexMsgObjIndex	//从1开始，0表示没有该值
 	DWORD normalIdx;
 };
 
-struct materialMsg
+struct materialMsg	//.mtl文件的mtl数据
 {
 	std::wstring mtlName;	//newmtl 的名字
-	std::wstring TextureFileName;
 	XMFLOAT3 ka;
 	XMFLOAT3 kd;
 	XMFLOAT3 ks;
 	float transparent;	//透明度，0-1，1是完全不透明
 	bool hasTexture;	//是否使用texture
 	bool isTransparent;	//是否需要blend
+	ID3D11ShaderResourceView * shaderResourceView;
 };
 
 struct Vertex
@@ -125,6 +126,8 @@ struct ConstSpace
 {
 	XMMATRIX WVP;
 	XMMATRIX worldSpace;
+	XMFLOAT4 difColor;
+	bool hasTexture;
 };
 struct Light
 {
@@ -170,8 +173,9 @@ ID3D11Device * d3dDevice;
 ID3D11DeviceContext  * d3dDeviceContext;
 ID3D11RenderTargetView * renderTargetView;
 ID3D11DepthStencilView * depthStencilView;
-ID3D11RasterizerState * rasterState_1;
-ID3D11RasterizerState * rasterState_2;
+ID3D11RasterizerState * rasterState_cw;
+ID3D11RasterizerState * rasterState_acw;
+ID3D11RasterizerState * rasterState_cwnc;
 ID3D11Texture2D *depthStencilTexture;
 ID3D11Buffer* squareVertBuffer;
 ID3D11Buffer* squareIndexBuffer;
@@ -188,13 +192,13 @@ ConstPointLight constPointLight;
 ConstSpotLight constSpotLight;
 ID3D11ShaderResourceView * shaderResourceView_brain;
 ID3D11ShaderResourceView * shaderResourceView_grass;
-ID3D11SamplerState * samplerState[2];	//1、重复	2、不重复
+ID3D11SamplerState * samplerState[2];	//1、平铺	2、不平铺
 ID3D11BlendState * blendState;
 ID3D10Blob* VS_Buffer;
 ID3D10Blob* PS_Buffer;
 ID3D11VertexShader* VS;
 ID3D11PixelShader* PS;
-XMVECTORF32 eyePos = {-1.0f,1.0f,-1.0f,0.0f};
+XMVECTORF32 eyePos = {-1.0f,5.0f,-1.0f,0.0f};
 XMVECTORF32 focusPos = {0.0f,1.0f,0.0f,0.0f};
 XMVECTORF32 upPos = {0.0f,1.0f,0.0f,0.0f};
 FLOAT cameraRotHorizontal = 0.0f;
@@ -231,6 +235,11 @@ ID3D11ShaderResourceView * shaderResourceView_skyBox;
 ID3D11Buffer* skyBoxVertBuffer;
 ID3D11Buffer* skyBoxIndexBuffer;
 ID3D11DepthStencilState  *skyboxDepthStencilState;
+
+//model
+ID3D11Buffer *modelVertexBuffer;
+ID3D11Buffer *modelIndexBuffer;
+std::vector<SurfaceMaterial> modelSurMetVec;
 
 
 //time
@@ -387,7 +396,10 @@ bool InitDirectInput(HINSTANCE hInstance);
 void DetectInput(double time);
 
 void SkyBoxInit();
-bool LoadObjModel();
+
+bool LoadObjModel(std::wstring filename,ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::vector<SurfaceMaterial> &surMetVec,bool isRHCoord);
+void drawModelNonBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::vector<SurfaceMaterial> &surMetVec,CXMMATRIX worldSpace,CXMMATRIX viewSpace);
+void drawModelBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::vector<SurfaceMaterial> &surMetVec,CXMMATRIX worldSpace,CXMMATRIX viewSpace);
 
 void UpdateScene(double currentFrameTime);
 void DrawScene();
@@ -627,17 +639,18 @@ void D2D_init(IDXGIAdapter1 *Adapter)
 	d3dDevice->CreateShaderResourceView(myTestTexture,NULL,&shaderResourceView_text);
 }
 
-bool LoadObjModel(std::wstring filename)
+bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *&indexBuffer,std::vector<SurfaceMaterial> &surMetVec,bool isRHCoord)
 {
-	std::vector<XMFLOAT3> vertexVec;	//obj文件对应排列下来的vertex信息
-	std::vector<XMFLOAT3> texCooVec;	//obj文件对应排列下来的texture coordinate信息
-	std::vector<XMFLOAT3> nornamVec;	//obj文件对应排列下来的normal信息
-	std::vector<DWORD> indexVec;		//vertMsgVec里面的vertex信息对应的index序列（这就是最终的用来构造index的序列）
-	std::vector<std::wstring> mtlLibVec;	//obj文件里引用的lib
-	std::vector<SurfaceMaterial> surMetVec;		//每个group对应的一些信息
+	std::vector<Vertex> vertexVec;		//生成的vertex序列
+	std::vector<DWORD> indexVec;		//vertMsgVec里面的vertex信息对应的index序列（其实也是最终的用来构造index的序列）
 	std::vector<VertexMsgObjIndex> vertMsgVec;	//obj文件里 f 字段的组合结构体以不重复的形式保存的vertex信息序列
-	std::vector<materialMsg> mtlVec;	//mtl里的每一个mtl的属性结构体
+	std::vector<XMFLOAT3> posVec;	//obj文件对应排列下来的vertex信息
+	std::vector<XMFLOAT2> texCooVec;	//obj文件对应排列下来的texture coordinate信息
+	std::vector<XMFLOAT3> nornamVec;	//obj文件对应排列下来的normal信息
+
 	std::wifstream modelFile(filename);
+	std::vector<std::wstring> mtlLibVec;	//obj文件里引用的lib
+	std::vector<materialMsg> mtlVec;	//mtl里的每一个不重复的mtl的属性结构体
 
 	int indexIndex = 0;	//记录当前提取到了第几个 f (index)
 	int groupIndex = 0;	//记录当前提取到了第几个 g (group)
@@ -646,6 +659,7 @@ bool LoadObjModel(std::wstring filename)
 	SurfaceMaterial surMetTemp;
 	VertexMsgObjIndex verMsgObjTemp;
 	materialMsg mtlMsgTemp;
+	Vertex vertexTemp;
 	DWORD verTemp;
 	DWORD texCoorTemp;
 	DWORD normalTemp;
@@ -671,14 +685,20 @@ bool LoadObjModel(std::wstring filename)
 					{
 						float vx,vy,vz;
 						modelFile >> vx >> vy >> vz;
-						vertexVec.push_back(XMFLOAT3(vx,vy,vz));
+						if(isRHCoord)
+							posVec.push_back(XMFLOAT3(vx,vy,-vz));
+						else
+							posVec.push_back(XMFLOAT3(vx,vy,vz));
 						break;
 					}
 				case 't':	//texture coord
 					{
 						float vx,vy,vz;
 						modelFile >> vx >> vy >> vz;
-						texCooVec.push_back(XMFLOAT3(vx,vy,vz));
+						if(isRHCoord)
+							texCooVec.push_back(XMFLOAT2(vx,1.0f - vy));
+						else
+							texCooVec.push_back(XMFLOAT2(vx,vy));
 						break;
 					}
 					break;
@@ -686,7 +706,10 @@ bool LoadObjModel(std::wstring filename)
 					{
 						float vx,vy,vz;
 						modelFile >> vx >> vy >> vz;
-						nornamVec.push_back(XMFLOAT3(vx,vy,vz));
+						if(isRHCoord)
+							nornamVec.push_back(XMFLOAT3(vx,vy,-vz));
+						else
+							nornamVec.push_back(XMFLOAT3(vx,vy,vz));
 						break;
 					}
 					break;
@@ -697,7 +720,8 @@ bool LoadObjModel(std::wstring filename)
 				surMetTemp.hasTexture = false;
 				surMetTemp.matName == L"";
 				surMetTemp.texArrayIndex = indexIndex;
-				surMetTemp.transparent = false;
+				surMetTemp.isTransparent = false;
+				surMetTemp.difColor = XMFLOAT4(0.0f,0.0f,0.0f,0.0f);
 				surMetVec.push_back(surMetTemp);
 				groupIndex++;
 				while(modelFile.get() != '\n' && modelFile);
@@ -766,14 +790,13 @@ bool LoadObjModel(std::wstring filename)
 					surMetTemp.hasTexture = false;
 					surMetTemp.matName = L"";
 					surMetTemp.texArrayIndex = 0;
-					surMetTemp.transparent = false;
+					surMetTemp.isTransparent = false;
 					surMetVec.push_back(surMetTemp);
 					groupIndex++;
 				}
-				modelFile.get();
 				for(int i = 0;i < 3;i++)	//循环获取3个vertex的属性
 				{
-					while(modelFile.get() == ' ');	//过滤开始的空格
+					while((keyChar = modelFile.get()) == ' ');	//过滤开始的空格
 					wstrTemp = L"";
 					do
 					{
@@ -858,14 +881,26 @@ bool LoadObjModel(std::wstring filename)
 											if(mtlFile.get() == ' ')
 											{ 
 												mtlFile >> mtlMsgTemp.mtlName;
-												mtlMsgTemp.hasTexture = false;
-												mtlMsgTemp.ka = XMFLOAT3(0.0f,0.0f,0.0f);
-												mtlMsgTemp.kd = XMFLOAT3(0.0f,0.0f,0.0f);
-												mtlMsgTemp.ks = XMFLOAT3(0.0f,0.0f,0.0f);
-												mtlMsgTemp.TextureFileName = L"";
-												mtlMsgTemp.transparent = 0.0f;
-												mtlMsgTemp.isTransparent = false;
-												mtlVec.push_back(mtlMsgTemp);
+												flagTemp = true;
+												for(int i = 0,len = mtlVec.size();i < len;i++)
+												{
+													if(mtlVec[i].mtlName == mtlMsgTemp.mtlName)
+													{
+														flagTemp = false;
+														break;
+													}
+												}
+												if(flagTemp == true)
+												{
+													mtlMsgTemp.hasTexture = false;
+													mtlMsgTemp.ka = XMFLOAT3(0.0f,0.0f,0.0f);
+													mtlMsgTemp.kd = XMFLOAT3(0.0f,0.0f,0.0f);
+													mtlMsgTemp.ks = XMFLOAT3(0.0f,0.0f,0.0f);
+													mtlMsgTemp.shaderResourceView = NULL;
+													mtlMsgTemp.transparent = 0.0f;
+													mtlMsgTemp.isTransparent = false;
+													mtlVec.push_back(mtlMsgTemp);
+												}
 											}
 										}
 									}
@@ -938,11 +973,15 @@ bool LoadObjModel(std::wstring filename)
 										keyChar = mtlFile.get();
 										if(keyChar == 'a')
 										{
-											mtlFile >> mtlVec.back().TextureFileName;
+											mtlFile >> wstrTemp;
+											HR(D3DX11CreateShaderResourceViewFromFile(d3dDevice,wstrTemp.c_str(),NULL,NULL,&(mtlVec.back().shaderResourceView),NULL));
+											mtlVec.back().hasTexture = true;
 										}
 										else if(keyChar == 'd')
 										{
-											mtlFile >> mtlVec.back().TextureFileName;
+											mtlFile >> wstrTemp;
+											HR(D3DX11CreateShaderResourceViewFromFile(d3dDevice,wstrTemp.c_str(),NULL,NULL,&(mtlVec.back().shaderResourceView),NULL));
+											mtlVec.back().hasTexture = true;
 										}
 									}
 									else if(keyChar == 'd')
@@ -971,6 +1010,85 @@ bool LoadObjModel(std::wstring filename)
 				}
 			}
 		}
+
+		//group根据名字获取对应netmtl的数据
+		for(int i = 0,len_surM = surMetVec.size();i < len_surM;i++)
+		{
+			for(int j = 0,len_mat = mtlVec.size();j < len_mat;j++)
+			{
+				if(surMetVec[i].matName == mtlVec[j].mtlName)
+				{
+					surMetVec[i].hasTexture = mtlVec[j].hasTexture;
+					surMetVec[i].isTransparent = mtlVec[j].isTransparent;
+					surMetVec[i].shaderResourceView = mtlVec[j].shaderResourceView;
+					surMetVec[i].difColor = XMFLOAT4(mtlVec[j].ka.x,mtlVec[j].ka.y,mtlVec[j].ka.z,mtlVec[j].transparent);
+					break;
+				}
+			}
+		}
+
+		/*创建vertex数组，index数组，*/
+		for(int i = 0,len = vertMsgVec.size();i < len;i++)
+		{
+			if(vertMsgVec[i].verIdx > 0)
+			{
+				vertexTemp.position = posVec[vertMsgVec[i].verIdx - 1];
+			}
+
+			if(vertMsgVec[i].texCoorIdx > 0)
+			{
+				vertexTemp.textureCoordinate = texCooVec[vertMsgVec[i].texCoorIdx - 1];
+			}
+			else
+			{
+				vertexTemp.textureCoordinate = XMFLOAT2(0.0f,0.0f);
+			}
+
+			if(vertMsgVec[i].normalIdx > 0)
+			{
+				vertexTemp.normal = posVec[vertMsgVec[i].normalIdx - 1];
+			}
+			else
+			{
+				vertexTemp.normal = vertexTemp.position;
+			}
+			vertexVec.push_back(vertexTemp);
+		}
+
+		/*可以补充法向量的自动获取*/
+
+		HRESULT hr;
+		D3D11_BUFFER_DESC vertexBufferDesc;
+		D3D11_SUBRESOURCE_DATA vertexData;
+
+		vertexBufferDesc.ByteWidth = sizeof(Vertex) * vertexVec.size();
+		vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+		vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+		vertexBufferDesc.CPUAccessFlags = 0;
+		vertexBufferDesc.MiscFlags = 0;
+		vertexBufferDesc.StructureByteStride = 0;
+		vertexData.pSysMem = &(vertexVec[0]);
+		vertexData.SysMemPitch = 0;
+		vertexData.SysMemSlicePitch = 0;
+
+		hr = d3dDevice->CreateBuffer(&vertexBufferDesc,&vertexData,&vertBuffer);
+		HR(hr);
+
+		D3D11_BUFFER_DESC indexBufferDesc;
+		D3D11_SUBRESOURCE_DATA indexData;
+
+		indexBufferDesc.ByteWidth = sizeof(DWORD) * indexVec.size();
+		indexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+		indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+		indexBufferDesc.CPUAccessFlags = 0;
+		indexBufferDesc.MiscFlags = 0;
+		indexBufferDesc.StructureByteStride = 0;
+		indexData.pSysMem = &(indexVec[0]);
+		indexData.SysMemPitch = 0;
+		indexData.SysMemSlicePitch = 0;
+
+		hr = d3dDevice->CreateBuffer(&indexBufferDesc,&indexData,&indexBuffer);
+		HR(hr);
 
 		return true;
 	}
@@ -1070,10 +1188,13 @@ bool RenderPipeline()
 	rasterStateDesc.FillMode = D3D11_FILL_SOLID;
 	rasterStateDesc.CullMode = D3D11_CULL_BACK;
 	rasterStateDesc.FrontCounterClockwise = false;
-	d3dDevice->CreateRasterizerState(&rasterStateDesc,&rasterState_1);
+	d3dDevice->CreateRasterizerState(&rasterStateDesc,&rasterState_cw);
 	rasterStateDesc.FrontCounterClockwise = true;
-	d3dDevice->CreateRasterizerState(&rasterStateDesc,&rasterState_2);
-	//d3dDeviceContext->RSSetState(rasterState_1);
+	d3dDevice->CreateRasterizerState(&rasterStateDesc,&rasterState_acw);
+	rasterStateDesc.FrontCounterClockwise = false;
+	rasterStateDesc.CullMode = D3D11_CULL_NONE;
+	d3dDevice->CreateRasterizerState(&rasterStateDesc,&rasterState_cwnc);
+	//d3dDeviceContext->RSSetState(rasterState_cw);
 
 //常量缓存部分（空间变换和光照）
 	D3D11_BUFFER_DESC constBufferDesc;
@@ -1157,8 +1278,8 @@ bool RenderPipeline()
 	D3D11_RENDER_TARGET_BLEND_DESC RenderTargetBlendDesc;
 
 	RenderTargetBlendDesc.BlendEnable = true;
-	RenderTargetBlendDesc.SrcBlend = D3D11_BLEND_SRC_COLOR;
-	RenderTargetBlendDesc.DestBlend = D3D11_BLEND_BLEND_FACTOR;
+	RenderTargetBlendDesc.SrcBlend = D3D11_BLEND_SRC_ALPHA;
+	RenderTargetBlendDesc.DestBlend = D3D11_BLEND_DEST_ALPHA;
 	RenderTargetBlendDesc.BlendOp = D3D11_BLEND_OP_ADD;
 	RenderTargetBlendDesc.SrcBlendAlpha = D3D11_BLEND_ONE;
 	RenderTargetBlendDesc.DestBlendAlpha = D3D11_BLEND_ZERO;
@@ -1350,9 +1471,12 @@ int CALLBACK WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine
 	WindowInit(hInstance);
 
 	DirectxInit();
+
+	LoadObjModel(L"spaceCompound.obj",modelVertexBuffer,modelIndexBuffer,modelSurMetVec,true);
 	InitDirectInput(hInstance);
 	RenderPipeline();
 	messageLoop();
+
 	return 0;
 }
 
@@ -1362,7 +1486,7 @@ void UpdateScene(double currentFrameTime)
 	rot2 += (float)currentFrameTime * 3.1416f;
 	if(rot2 > 3.1416f * 2) rot2 -= 3.1416f * 2;
 }
-void drawText(const wchar_t * text)
+void DrawD2DText(const wchar_t * text)
 {
 	//Release the D3D 11 Device
 	keyMutex11->ReleaseSync(0);
@@ -1406,16 +1530,17 @@ void drawText(const wchar_t * text)
 	//d3d11DevCon->OMSetBlendState(Transparency, NULL, 0xffffffff);
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
-	float blendFactor[] = {0.75f, 0.75f, 0.75f, 1.0f};
 	d3dDeviceContext->IASetVertexBuffers(0,1,&textVertBuffer,&stride,&offset);
 	d3dDeviceContext->IASetIndexBuffer(textIndexBuffer,DXGI_FORMAT_R32_UINT,0);
 	constSpace.WVP = XMMatrixTranspose(XMMatrixIdentity());
 	constSpace.worldSpace = constSpace.WVP;
+	constSpace.hasTexture = true;
+	constSpace.difColor = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_text);
 	d3dDeviceContext->PSSetSamplers(0,1,samplerState + 1);
 	d3dDeviceContext->PSSetShader(D2D_PS,0,0);
-	d3dDeviceContext->OMSetBlendState(blendState,blendFactor,0xffffffff);
+	d3dDeviceContext->OMSetBlendState(blendState,0,0xffffffff);
 	d3dDeviceContext->DrawIndexed(6,0,0);
 }
 void DrawSkyBox()
@@ -1425,6 +1550,7 @@ void DrawSkyBox()
 	d3dDeviceContext->IASetVertexBuffers(0,1,&skyBoxVertBuffer,&stride,&offset);
 	d3dDeviceContext->IASetIndexBuffer(skyBoxIndexBuffer,DXGI_FORMAT_R32_UINT,0);
 	d3dDeviceContext->VSSetShader(SkyBox_VS,0,0);
+	d3dDeviceContext->RSSetState(rasterState_cwnc);
 	d3dDeviceContext->PSSetShader(SkyBox_PS,0,0);
 	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_skyBox);
 	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
@@ -1433,6 +1559,8 @@ void DrawSkyBox()
 	XMMATRIX skyBoxPos = XMMatrixTranslation(eyePos.f[0],eyePos.f[1],eyePos.f[2]);
 	constSpace.WVP = XMMatrixTranspose(worldSpace * XMMatrixScaling(5.0f,5.0f,5.0f) * skyBoxPos * viewSpace * projectionMatrix);
 	constSpace.worldSpace = skyBoxPos;
+	constSpace.hasTexture = true;
+	constSpace.difColor = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 
 	d3dDeviceContext->OMSetDepthStencilState(skyboxDepthStencilState,0);
@@ -1446,6 +1574,9 @@ void DrawScene()
 	
 //画天空盒
 	DrawSkyBox();
+	
+//画模型不透明部分
+	drawModelNonBlend(modelVertexBuffer,modelIndexBuffer,modelSurMetVec,worldSpace,viewSpace);
 
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
@@ -1462,45 +1593,147 @@ void DrawScene()
 //画草地
 	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * projectionMatrix);
 	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
+	constSpace.hasTexture = true;
+	constSpace.difColor = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_grass);
 	d3dDeviceContext->DrawIndexed(6,36,0);
+
 //画两个立方体
 	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_brain);
 	float blendFactor[] = {0.75f, 0.75f, 0.75f, 1.0f};
 	d3dDeviceContext->OMSetBlendState(blendState,blendFactor,0xffffffff);
 	XMMATRIX ractangle_1 = XMMatrixRotationAxis(XMVectorSet(0,1,0,0),rot2) * XMMatrixTranslation(2,0,0);
 	
-	d3dDeviceContext->RSSetState(rasterState_2);
+	d3dDeviceContext->RSSetState(rasterState_acw);
 	constSpace.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * projectionMatrix);
 	constSpace.worldSpace = XMMatrixTranspose(worldSpace * ractangle_1);
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
 
-	d3dDeviceContext->RSSetState(rasterState_1);
+	d3dDeviceContext->RSSetState(rasterState_cw);
 	constSpace.WVP = XMMatrixTranspose(worldSpace * ractangle_1 * viewSpace * projectionMatrix);
 	constSpace.worldSpace = XMMatrixTranspose(worldSpace * ractangle_1);
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
 
-	d3dDeviceContext->RSSetState(rasterState_2);
+	d3dDeviceContext->RSSetState(rasterState_acw);
 	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * projectionMatrix);
 	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
 	
-	d3dDeviceContext->RSSetState(rasterState_1);
+	d3dDeviceContext->RSSetState(rasterState_cw);
 	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * projectionMatrix);
 	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
 
+//画模型透明部分
+	drawModelBlend(modelVertexBuffer,modelIndexBuffer,modelSurMetVec,worldSpace,viewSpace);
+
 //显示文本
 	wchar_t timeTemp[120];
 	swprintf_s(timeTemp,L"%d",fps);
-	drawText(timeTemp);
+	DrawD2DText(timeTemp);
 
 	d3dSwapChain->Present(0,0);
+}
+
+void drawModelNonBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::vector<SurfaceMaterial> &surMetVec,CXMMATRIX worldSpace,CXMMATRIX viewSpace)
+{
+	UINT indexStart = 0;
+	UINT indexCount = 0;
+	//no blend
+	UINT stride = sizeof(Vertex);
+	UINT offset = 0;
+	d3dDeviceContext->IASetVertexBuffers(0,1,&vertBuffer,&stride,&offset);
+	d3dDeviceContext->IASetIndexBuffer(indexBuffer,DXGI_FORMAT_R32_UINT,0);
+	d3dDeviceContext->VSSetShader(VS,0,0);
+	d3dDeviceContext->RSSetState(rasterState_cwnc);
+	d3dDeviceContext->PSSetShader(PS,0,0);
+	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
+	d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
+	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * projectionMatrix);
+	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
+	for(int i = 0,len = surMetVec.size();i < len;i++)
+	{
+		if(surMetVec[i].isTransparent == false)
+		{
+			indexStart = surMetVec[i].texArrayIndex;
+			if(i == len - 1)
+			{
+				D3D11_BUFFER_DESC bufDescTemp;
+				indexBuffer->GetDesc(&bufDescTemp);
+				indexCount = bufDescTemp.ByteWidth - surMetVec[i].texArrayIndex;
+			}
+			else
+			{
+				indexCount = surMetVec[i+1].texArrayIndex - surMetVec[i].texArrayIndex;
+			}
+			if(surMetVec[i].hasTexture == true)
+			{
+				d3dDeviceContext->PSSetShaderResources(0,1,&(surMetVec[i].shaderResourceView));
+			}
+			else
+			{
+				constSpace.difColor = surMetVec[i].difColor;
+			}
+			constSpace.hasTexture = surMetVec[i].hasTexture;
+			d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
+			d3dDeviceContext->DrawIndexed(indexCount,indexStart,0);
+		}
+	}
+}
+
+void drawModelBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::vector<SurfaceMaterial> &surMetVec,CXMMATRIX worldSpace,CXMMATRIX viewSpace)
+{
+	UINT indexStart = 0;
+	UINT indexCount = 0;
+	//no blend
+	UINT stride = sizeof(Vertex);
+	UINT offset = 0;
+	d3dDeviceContext->IASetVertexBuffers(0,1,&vertBuffer,&stride,&offset);
+	d3dDeviceContext->IASetIndexBuffer(indexBuffer,DXGI_FORMAT_R32_UINT,0);
+	d3dDeviceContext->VSSetShader(VS,0,0);
+	d3dDeviceContext->RSSetState(rasterState_cwnc);
+	d3dDeviceContext->PSSetShader(PS,0,0);
+	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
+	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * projectionMatrix);
+	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
+	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
+	d3dDeviceContext->OMSetBlendState(blendState,0,0xffffffff);
+	for(int i = 0,len = surMetVec.size();i < len;i++)
+	{
+		if(surMetVec[i].isTransparent == true)
+		{
+			indexStart = surMetVec[i].texArrayIndex;
+			if(i == len - 1)
+			{
+				D3D11_BUFFER_DESC bufDescTemp;
+				indexBuffer->GetDesc(&bufDescTemp);
+				indexCount = bufDescTemp.ByteWidth - surMetVec[i].texArrayIndex;
+			}
+			else
+			{
+				indexCount = surMetVec[i+1].texArrayIndex - surMetVec[i].texArrayIndex;
+			}
+			if(surMetVec[i].hasTexture == true)
+			{
+				d3dDeviceContext->PSSetShaderResources(0,1,&(surMetVec[i].shaderResourceView));
+			}
+			else
+			{
+				constSpace.difColor = surMetVec[i].difColor;
+			}
+			constSpace.hasTexture = surMetVec[i].hasTexture;
+			d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
+			d3dDeviceContext->RSSetState(rasterState_acw);
+			d3dDeviceContext->DrawIndexed(indexCount,indexStart,0);
+			d3dDeviceContext->RSSetState(rasterState_cw);
+			d3dDeviceContext->DrawIndexed(indexCount,indexStart,0);
+		}
+	}
 }
 
 //Input Controller

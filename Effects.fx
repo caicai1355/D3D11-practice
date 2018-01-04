@@ -25,6 +25,8 @@ cbuffer CBufferMatrix : register(b0)
 {
 	float4x4 WVP;
 	float4x4 worldSpace;
+	float4 difColor;
+	bool hasTexture;
 };
 
 cbuffer CBufferLight : register(b1)
@@ -87,7 +89,12 @@ float4 PS(VS_OUTPUT input) : SV_TARGET
 	float3 pointLightVector,spotLightVector;
 	float3 norLightDir,norSpotLightDir;
 
-	float4 temp = ObjTexture.Sample( ObjSamplerState, input.Texture);
+	float4 temp;
+	if(hasTexture)
+		temp = ObjTexture.Sample( ObjSamplerState, input.Texture);
+	else
+		temp = difColor;
+	temp = ObjTexture.Sample( ObjSamplerState, input.Texture);
 	input.Normal = normalize(input.Normal);
 	//ambient light
 	float4 color = light.ambientIntensity * temp;
