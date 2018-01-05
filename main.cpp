@@ -36,15 +36,15 @@
 #include <comdef.h>
 #endif
 
-//#define WIDTH 100
-//#define HEIGHT 100 
-//#define POS_X 1200 
-//#define POS_Y 700
+#define WIDTH 100
+#define HEIGHT 100 
+#define POS_X 1200 
+#define POS_Y 700
 
-#define WIDTH 500
-#define HEIGHT 500 
-#define POS_X 600 
-#define POS_Y 200
+//#define WIDTH 500
+//#define HEIGHT 500 
+//#define POS_X 600 
+//#define POS_Y 200
 
 //#define LIGHT_TYPE_VERTEX_NORMAL
 #define LIGHT_TYPE_PLANE_NORMAL
@@ -250,24 +250,24 @@ int frameCount = 0;
 int fps = 0;
 
 //FLOAT colorRGBA[4] = {0.0,1.0,0.0,1.0};	//纯绿
-FLOAT colorRGBA[4] = {0.0,0.0,0.0,1.0};	//纯黑
+FLOAT colorRGBA[4] = {0.0f,0.0f,0.0f,1.0f};	//纯黑
 FLOAT rot1 = 0.0f;
 FLOAT rot2 = 0.0f;
 
-XMFLOAT3 cubeVertex0 = XMFLOAT3(-0.5,0.5,-0.5);
-XMFLOAT3 cubeVertex1 = XMFLOAT3(0.5,0.5,-0.5);
-XMFLOAT3 cubeVertex2 = XMFLOAT3(-0.5,-0.5,-0.5);
-XMFLOAT3 cubeVertex3 = XMFLOAT3(0.5,-0.5,-0.5);
-XMFLOAT3 cubeVertex4 = XMFLOAT3(-0.5,0.5,0.5);
-XMFLOAT3 cubeVertex5 = XMFLOAT3(0.5,0.5,0.5);
-XMFLOAT3 cubeVertex6 = XMFLOAT3(-0.5,-0.5,0.5);
-XMFLOAT3 cubeVertex7 = XMFLOAT3(0.5,-0.5,0.5);
-#define CONTEXT_PIC_NUM 1.0
-XMFLOAT2 leftUp = XMFLOAT2(0.0,0.0);
-XMFLOAT2 rightUp = XMFLOAT2(CONTEXT_PIC_NUM,0.0);
-XMFLOAT2 leftDown = XMFLOAT2(0.0,CONTEXT_PIC_NUM);
+XMFLOAT3 cubeVertex0 = XMFLOAT3(-0.5f,0.5f,-0.5f);
+XMFLOAT3 cubeVertex1 = XMFLOAT3(0.5f,0.5f,-0.5f);
+XMFLOAT3 cubeVertex2 = XMFLOAT3(-0.5f,-0.5f,-0.5f);
+XMFLOAT3 cubeVertex3 = XMFLOAT3(0.5f,-0.5f,-0.5f);
+XMFLOAT3 cubeVertex4 = XMFLOAT3(-0.5f,0.5f,0.5f);
+XMFLOAT3 cubeVertex5 = XMFLOAT3(0.5f,0.5f,0.5f);
+XMFLOAT3 cubeVertex6 = XMFLOAT3(-0.5f,-0.5f,0.5f);
+XMFLOAT3 cubeVertex7 = XMFLOAT3(0.5f,-0.5f,0.5f);
+#define CONTEXT_PIC_NUM 1.0f
+XMFLOAT2 leftUp = XMFLOAT2(0.0f,0.0f);
+XMFLOAT2 rightUp = XMFLOAT2(CONTEXT_PIC_NUM,0.0f);
+XMFLOAT2 leftDown = XMFLOAT2(0.0f,CONTEXT_PIC_NUM);
 XMFLOAT2 rightDown = XMFLOAT2(CONTEXT_PIC_NUM,CONTEXT_PIC_NUM);
-#define SKYBOX_SIZE 1.0
+#define SKYBOX_SIZE 1.0f
 XMFLOAT3 skyBox0 = XMFLOAT3(-SKYBOX_SIZE,SKYBOX_SIZE,-SKYBOX_SIZE);
 XMFLOAT3 skyBox1 = XMFLOAT3(SKYBOX_SIZE,SKYBOX_SIZE,-SKYBOX_SIZE);
 XMFLOAT3 skyBox2 = XMFLOAT3(-SKYBOX_SIZE,-SKYBOX_SIZE,-SKYBOX_SIZE);
@@ -646,7 +646,7 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 	std::vector<VertexMsgObjIndex> vertMsgVec;	//obj文件里 f 字段的组合结构体以不重复的形式保存的vertex信息序列
 	std::vector<XMFLOAT3> posVec;	//obj文件对应排列下来的vertex信息
 	std::vector<XMFLOAT2> texCooVec;	//obj文件对应排列下来的texture coordinate信息
-	std::vector<XMFLOAT3> nornamVec;	//obj文件对应排列下来的normal信息
+	std::vector<XMFLOAT3> normalVec;	//obj文件对应排列下来的normal信息
 
 	std::wifstream modelFile(filename);
 	std::vector<std::wstring> mtlLibVec;	//obj文件里引用的lib
@@ -686,7 +686,7 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 						float vx,vy,vz;
 						modelFile >> vx >> vy >> vz;
 						if(isRHCoord)
-							posVec.push_back(XMFLOAT3(vx,vy,-vz));
+							posVec.push_back(XMFLOAT3(vx,vy,vz * -1.0f));
 						else
 							posVec.push_back(XMFLOAT3(vx,vy,vz));
 						break;
@@ -707,9 +707,9 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 						float vx,vy,vz;
 						modelFile >> vx >> vy >> vz;
 						if(isRHCoord)
-							nornamVec.push_back(XMFLOAT3(vx,vy,-vz));
+							normalVec.push_back(XMFLOAT3(vx,vy,vz * -1.0f));
 						else
-							nornamVec.push_back(XMFLOAT3(vx,vy,vz));
+							normalVec.push_back(XMFLOAT3(vx,vy,vz));
 						break;
 					}
 					break;
@@ -1046,7 +1046,7 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 
 			if(vertMsgVec[i].normalIdx > 0)
 			{
-				vertexTemp.normal = posVec[vertMsgVec[i].normalIdx - 1];
+				vertexTemp.normal = normalVec[vertMsgVec[i].normalIdx - 1];
 			}
 			else
 			{
@@ -1177,14 +1177,15 @@ bool RenderPipeline()
 	viewPort.TopLeftY = 0;
 	viewPort.Width = WIDTH;
 	viewPort.Height = HEIGHT;
-	viewPort.MaxDepth = 1.0;
-	viewPort.MinDepth = 0.0;
+	viewPort.MaxDepth = 1.0f;
+	viewPort.MinDepth = 0.0f;
 
 	d3dDeviceContext->RSSetViewports(1,&viewPort);
 
 	D3D11_RASTERIZER_DESC rasterStateDesc;
 	ZeroMemory(&rasterStateDesc,sizeof(rasterStateDesc));
 	//rasterStateDesc.FillMode = D3D11_FILL_WIREFRAME;
+	rasterStateDesc.DepthClipEnable = true;
 	rasterStateDesc.FillMode = D3D11_FILL_SOLID;
 	rasterStateDesc.CullMode = D3D11_CULL_BACK;
 	rasterStateDesc.FrontCounterClockwise = false;
@@ -1208,9 +1209,10 @@ bool RenderPipeline()
 	constBufferDesc.StructureByteStride = 0;
 	d3dDevice->CreateBuffer(&constBufferDesc,NULL,&constBufferSpace);
 	d3dDeviceContext->VSSetConstantBuffers(0,1,&constBufferSpace);
+	//d3dDeviceContext->PSSetConstantBuffers(0,1,&constBufferSpace);
 
 	worldSpace = XMMatrixIdentity();
-	projectionMatrix =  XMMatrixPerspectiveFovLH(0.4f*3.14f,(float)WIDTH/(float)HEIGHT,1.0f,1000.0f);
+	projectionMatrix =  XMMatrixPerspectiveFovLH(0.4f*3.14f,(float)WIDTH/(float)HEIGHT,0.01f,1000.0f);
 	viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
 	cameraDir.v = focusPos.v - eyePos.v;
 	cameraRotHorizontal = atan2(cameraDir.f[2],cameraDir.f[0]);
@@ -1247,13 +1249,13 @@ bool RenderPipeline()
 	d3dDevice->CreateBuffer(&constBufferDesc,NULL,&constBufferSpotLight);
 	d3dDeviceContext->PSSetConstantBuffers(3,1,&constBufferSpotLight);
 
-	constSpotLight.spotLight.distanceAttr = XMFLOAT3(0.0f,0.5f,0.0f);
-	constSpotLight.spotLight.range = 5.0f;
+	constSpotLight.spotLight.distanceAttr = XMFLOAT3(0.2f,0.1f,0.0f);
+	constSpotLight.spotLight.range = 50.0f;
 	constSpotLight.spotLight.pad = 0.0f;
 	constSpotLight.spotLight.pos = XMFLOAT3(eyePos.f);
 	constSpotLight.spotLight.dir = XMFLOAT3(cameraDir.f);
 	constSpotLight.spotLight.lightIntensity = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
-	constSpotLight.spotLight.deflectAttr = 5.0f;
+	constSpotLight.spotLight.deflectAttr = 10.0f;
 	
 	d3dDeviceContext->UpdateSubresource(constBufferSpotLight,0,NULL,&constSpotLight,0,0);
 
@@ -1403,10 +1405,10 @@ void IAInitText()
 {
 	Vertex textVertex[] = 
 	{
-		{XMFLOAT3(-1.0,1.0,-1.0),leftUp,XMFLOAT3(0.0f,0.0f,-1.0f)},
-		{XMFLOAT3(1.0,1.0,-1.0),rightUp,XMFLOAT3(0.0f,0.0f,-1.0f)},
-		{XMFLOAT3(-1.0,-1.0,-1.0),leftDown,XMFLOAT3(0.0f,0.0f,-1.0f)},
-		{XMFLOAT3(1.0,-1.0,-1.0),rightDown,XMFLOAT3(0.0f,0.0f,-1.0f)},
+		{XMFLOAT3(-1.0f,1.0f,0.0f),leftUp,XMFLOAT3(0.0f,0.0f,-1.0f)},
+		{XMFLOAT3(1.0f,1.0f,0.0f),rightUp,XMFLOAT3(0.0f,0.0f,-1.0f)},
+		{XMFLOAT3(-1.0f,-1.0f,0.0f),leftDown,XMFLOAT3(0.0f,0.0f,-1.0f)},
+		{XMFLOAT3(1.0f,-1.0f,0.0f),rightDown,XMFLOAT3(0.0f,0.0f,-1.0f)},
 	};
 	DWORD textIndex[] = 
 	{
@@ -1537,9 +1539,10 @@ void DrawD2DText(const wchar_t * text)
 	constSpace.hasTexture = true;
 	constSpace.difColor = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
+	d3dDeviceContext->VSSetShader(VS,0,0);
+	d3dDeviceContext->PSSetShader(D2D_PS,0,0);
 	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_text);
 	d3dDeviceContext->PSSetSamplers(0,1,samplerState + 1);
-	d3dDeviceContext->PSSetShader(D2D_PS,0,0);
 	d3dDeviceContext->OMSetBlendState(blendState,0,0xffffffff);
 	d3dDeviceContext->DrawIndexed(6,0,0);
 }
@@ -1601,8 +1604,7 @@ void DrawScene()
 
 //画两个立方体
 	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_brain);
-	float blendFactor[] = {0.75f, 0.75f, 0.75f, 1.0f};
-	d3dDeviceContext->OMSetBlendState(blendState,blendFactor,0xffffffff);
+	d3dDeviceContext->OMSetBlendState(blendState,0,0xffffffff);
 	XMMATRIX ractangle_1 = XMMatrixRotationAxis(XMVectorSet(0,1,0,0),rot2) * XMMatrixTranslation(2,0,0);
 	
 	d3dDeviceContext->RSSetState(rasterState_acw);
@@ -1650,7 +1652,7 @@ void drawModelNonBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std:
 	d3dDeviceContext->IASetVertexBuffers(0,1,&vertBuffer,&stride,&offset);
 	d3dDeviceContext->IASetIndexBuffer(indexBuffer,DXGI_FORMAT_R32_UINT,0);
 	d3dDeviceContext->VSSetShader(VS,0,0);
-	d3dDeviceContext->RSSetState(rasterState_cw);
+	d3dDeviceContext->RSSetState(rasterState_cwnc);
 	d3dDeviceContext->PSSetShader(PS,0,0);
 	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
 	d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
@@ -1678,6 +1680,7 @@ void drawModelNonBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std:
 			else
 			{
 				constSpace.difColor = surMetVec[i].difColor;
+				//constSpace.difColor = XMFLOAT4(0.5f,0.5f,0.5f,0.8f);
 			}
 			constSpace.hasTexture = surMetVec[i].hasTexture;
 			d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
@@ -1701,7 +1704,6 @@ void drawModelBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::ve
 	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
 	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * projectionMatrix);
 	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
-	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->OMSetBlendState(blendState,0,0xffffffff);
 	for(int i = 0,len = surMetVec.size();i < len;i++)
 	{
@@ -1725,12 +1727,10 @@ void drawModelBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::ve
 			else
 			{
 				constSpace.difColor = surMetVec[i].difColor;
+				//constSpace.difColor = XMFLOAT4(0.5f,0.5f,0.5f,0.8f);
 			}
 			constSpace.hasTexture = surMetVec[i].hasTexture;
 			d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
-			d3dDeviceContext->RSSetState(rasterState_acw);
-			d3dDeviceContext->DrawIndexed(indexCount,indexStart,0);
-			d3dDeviceContext->RSSetState(rasterState_cw);
 			d3dDeviceContext->DrawIndexed(indexCount,indexStart,0);
 		}
 	}

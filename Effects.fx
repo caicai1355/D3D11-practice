@@ -90,11 +90,11 @@ float4 PS(VS_OUTPUT input) : SV_TARGET
 	float3 norLightDir,norSpotLightDir;
 
 	float4 temp;
-	if(hasTexture == false)
+	if(hasTexture == true)
 		temp = ObjTexture.Sample( ObjSamplerState, input.Texture);
 	else
 		temp = difColor;
-	//temp = ObjTexture.Sample( ObjSamplerState, input.Texture);
+	temp = ObjTexture.Sample( ObjSamplerState, input.Texture);
 	input.Normal = normalize(input.Normal);
 	//ambient light
 	float4 color = light.ambientIntensity * temp;
@@ -120,8 +120,6 @@ float4 PS(VS_OUTPUT input) : SV_TARGET
 	}
 	
 	return color;
-	//return float4(1.0f,1.0f,1.0f,1.0f);
-	//return temp;
 }
 
 float4 D2D_PS(VS_OUTPUT input) : SV_TARGET
