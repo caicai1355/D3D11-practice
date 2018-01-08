@@ -94,7 +94,8 @@ float4 PS(VS_OUTPUT input) : SV_TARGET
 		temp = ObjTexture.Sample( ObjSamplerState, input.Texture);
 	else
 		temp = difColor;
-	temp = ObjTexture.Sample( ObjSamplerState, input.Texture);
+	float alpha = temp.a;
+
 	input.Normal = normalize(input.Normal);
 	//ambient light
 	float4 color = light.ambientIntensity * temp;
@@ -119,7 +120,8 @@ float4 PS(VS_OUTPUT input) : SV_TARGET
 		color += spotLight.lightIntensity / (spotLight.distanceAttr[0] + spotLight.distanceAttr[1]*SpotD + spotLight.distanceAttr[2]*SpotD*SpotD) * pow(max(dot(spotLightVector,-norSpotLightDir),0.0f),spotLight.deflectAttr) * temp * saturate(dot(spotLightVector,input.Normal));
 	}
 	
-	return color;
+	return float4(color.rgb,alpha);
+	//return float4(1.0f - color.w,color.w,1.0f - color.w,color.w);
 }
 
 float4 D2D_PS(VS_OUTPUT input) : SV_TARGET

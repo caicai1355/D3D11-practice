@@ -947,7 +947,7 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 						{
 						case 'r':
 							mtlFile >> floatTemp;
-							mtlVec.back().transparent = 1 - floatTemp;
+							mtlVec.back().transparent = 1.0f - floatTemp;
 							if(floatTemp > 0.0f)
 							{
 								mtlVec.back().isTransparent = true;
@@ -1209,7 +1209,7 @@ bool RenderPipeline()
 	constBufferDesc.StructureByteStride = 0;
 	d3dDevice->CreateBuffer(&constBufferDesc,NULL,&constBufferSpace);
 	d3dDeviceContext->VSSetConstantBuffers(0,1,&constBufferSpace);
-	//d3dDeviceContext->PSSetConstantBuffers(0,1,&constBufferSpace);
+	d3dDeviceContext->PSSetConstantBuffers(0,1,&constBufferSpace);
 
 	worldSpace = XMMatrixIdentity();
 	projectionMatrix =  XMMatrixPerspectiveFovLH(0.4f*3.14f,(float)WIDTH/(float)HEIGHT,0.01f,1000.0f);
@@ -1224,7 +1224,7 @@ bool RenderPipeline()
 	d3dDeviceContext->PSSetConstantBuffers(1,1,&constBufferLight);
 
 	constLight.light.pad = 0.0f;
-	constLight.light.ambientIntensity = XMFLOAT4(0.2f,0.2f,0.2f,0.2f);
+	constLight.light.ambientIntensity = XMFLOAT4(0.2f,0.2f,0.2f,1.0f);
 	//constLight.light.ambientIntensity = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);	//这个其实是环境光，就先合并到平行光里了
 	constLight.light.lightIntensity = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
 	constLight.light.dir = XMFLOAT3(5.3f,-1.3f,1.0f);
@@ -1280,8 +1280,8 @@ bool RenderPipeline()
 	D3D11_RENDER_TARGET_BLEND_DESC RenderTargetBlendDesc;
 
 	RenderTargetBlendDesc.BlendEnable = true;
-	RenderTargetBlendDesc.SrcBlend = D3D11_BLEND_SRC_ALPHA;
-	RenderTargetBlendDesc.DestBlend = D3D11_BLEND_DEST_ALPHA;
+	RenderTargetBlendDesc.SrcBlend = D3D11_BLEND_SRC_ALPHA;//D3D11_BLEND_SRC_ALPHA;
+	RenderTargetBlendDesc.DestBlend = D3D11_BLEND_INV_SRC_ALPHA;;//D3D11_BLEND_DEST_ALPHA;
 	RenderTargetBlendDesc.BlendOp = D3D11_BLEND_OP_ADD;
 	RenderTargetBlendDesc.SrcBlendAlpha = D3D11_BLEND_ONE;
 	RenderTargetBlendDesc.DestBlendAlpha = D3D11_BLEND_ZERO;
@@ -1630,6 +1630,12 @@ void DrawScene()
 	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
+	
+		//d3dDeviceContext->RSSetState(rasterState_cwnc);
+		//d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
+		//d3dDeviceContext->IASetVertexBuffers(0,1,&modelVertexBuffer,&stride,&offset);
+		//d3dDeviceContext->IASetIndexBuffer(modelIndexBuffer,DXGI_FORMAT_R32_UINT,0);
+		//d3dDeviceContext->DrawIndexed(6,0,0);
 
 //画模型透明部分
 	drawModelBlend(modelVertexBuffer,modelIndexBuffer,modelSurMetVec,worldSpace,viewSpace);
@@ -1699,7 +1705,7 @@ void drawModelBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::ve
 	d3dDeviceContext->IASetVertexBuffers(0,1,&vertBuffer,&stride,&offset);
 	d3dDeviceContext->IASetIndexBuffer(indexBuffer,DXGI_FORMAT_R32_UINT,0);
 	d3dDeviceContext->VSSetShader(VS,0,0);
-	d3dDeviceContext->RSSetState(rasterState_cw);
+	d3dDeviceContext->RSSetState(rasterState_cwnc);
 	d3dDeviceContext->PSSetShader(PS,0,0);
 	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
 	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * projectionMatrix);
