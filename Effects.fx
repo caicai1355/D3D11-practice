@@ -99,7 +99,7 @@ float4 PS(VS_OUTPUT input) : SV_TARGET
 		temp = difColor;
 	float alpha = temp.a;
 
-	if(hasNormalMap = true)
+	if(hasNormalMap == true)
 	{
 
 	}

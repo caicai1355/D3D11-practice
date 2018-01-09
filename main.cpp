@@ -36,15 +36,15 @@
 #include <comdef.h>
 #endif
 
-#define WIDTH 100
-#define HEIGHT 100 
-#define POS_X 1200 
-#define POS_Y 700
+//#define WIDTH 100
+//#define HEIGHT 100 
+//#define POS_X 1200 
+//#define POS_Y 700
 
-//#define WIDTH 500
-//#define HEIGHT 500 
-//#define POS_X 600 
-//#define POS_Y 200
+#define WIDTH 500
+#define HEIGHT 500 
+#define POS_X 600 
+#define POS_Y 200
 
 //#define LIGHT_TYPE_VERTEX_NORMAL
 #define LIGHT_TYPE_PLANE_NORMAL
@@ -725,7 +725,10 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 				while(modelFile.get() != '\n' && modelFile);
 				break;
 			case 'g':
-				surMetTemp.matName == L"";
+				if(surMetVec.size() > 0)
+					surMetTemp.matName == surMetVec.back().matName;	//这里表示默认用上面的除非有usemtl（其实好像直接不赋值就已经是上一个了？）
+				else
+					surMetTemp.matName == L"";
 				surMetTemp.texArrayIndex = indexIndex;
 				surMetTemp.isTransparent = false;
 				surMetTemp.hasNormalMap = false;
@@ -1051,6 +1054,7 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 		//group根据名字获取对应netmtl的数据
 		for(int i = 0,len_surM = surMetVec.size();i < len_surM;i++)
 		{
+			flagTemp = false;
 			for(int j = 0,len_mat = mtlVec.size();j < len_mat;j++)
 			{
 				if(surMetVec[i].matName == mtlVec[j].mtlName)
@@ -1061,8 +1065,18 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 					surMetVec[i].shaderResourceView = mtlVec[j].shaderResourceView;
 					surMetVec[i].normalMapResourceView = mtlVec[j].normalMapResourceView;
 					surMetVec[i].difColor = XMFLOAT4(mtlVec[j].ka.x,mtlVec[j].ka.y,mtlVec[j].ka.z,mtlVec[j].transparent);
+					flagTemp = true;
 					break;
 				}
+			}
+			if(flagTemp == false && mtlVec.size() > 0)	//例子上写的是如果找不到匹配的话就默认用第一个（我先照着这么做。。。）
+			{
+				surMetVec[i].hasTexture = mtlVec[0].hasTexture;
+				surMetVec[i].isTransparent = mtlVec[0].isTransparent;
+				surMetVec[i].hasNormalMap = mtlVec[0].hasNormalMap;
+				surMetVec[i].shaderResourceView = mtlVec[0].shaderResourceView;
+				surMetVec[i].normalMapResourceView = mtlVec[0].normalMapResourceView;
+				surMetVec[i].difColor = XMFLOAT4(mtlVec[0].ka.x,mtlVec[0].ka.y,mtlVec[0].ka.z,mtlVec[0].transparent);
 			}
 		}
 
@@ -1225,6 +1239,8 @@ bool RenderPipeline()
 	ZeroMemory(&rasterStateDesc,sizeof(rasterStateDesc));
 	//rasterStateDesc.FillMode = D3D11_FILL_WIREFRAME;
 	rasterStateDesc.DepthClipEnable = true;
+	//rasterStateDesc.DepthBiasClamp = -0.1;
+	//rasterStateDesc.DepthBias = 1;
 	rasterStateDesc.FillMode = D3D11_FILL_SOLID;
 	rasterStateDesc.CullMode = D3D11_CULL_BACK;
 	rasterStateDesc.FrontCounterClockwise = false;
@@ -1619,8 +1635,8 @@ void DrawScene()
 	DrawSkyBox();
 	
 //画模型不透明部分
-	drawModelNonBlend(modelHouseVertexBuffer,modelHouseIndexBuffer,modelHouseSurMetVec,worldSpace,viewSpace);
 	drawModelNonBlend(modelGroundVertexBuffer,modelGroundIndexBuffer,modelGroundSurMetVec,worldSpace,viewSpace);
+	drawModelNonBlend(modelHouseVertexBuffer,modelHouseIndexBuffer,modelHouseSurMetVec,worldSpace,viewSpace);
 
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
@@ -1673,8 +1689,8 @@ void DrawScene()
 	d3dDeviceContext->DrawIndexed(36,0,0);
 
 //画模型透明部分
-	drawModelBlend(modelHouseVertexBuffer,modelHouseIndexBuffer,modelHouseSurMetVec,worldSpace,viewSpace);
 	drawModelBlend(modelGroundVertexBuffer,modelGroundIndexBuffer,modelGroundSurMetVec,worldSpace,viewSpace);
+	drawModelBlend(modelHouseVertexBuffer,modelHouseIndexBuffer,modelHouseSurMetVec,worldSpace,viewSpace);
 
 //显示文本
 	wchar_t timeTemp[120];
