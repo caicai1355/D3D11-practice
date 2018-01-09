@@ -27,6 +27,7 @@ cbuffer CBufferMatrix : register(b0)
 	float4x4 worldSpace;
 	float4 difColor;
 	bool hasTexture;
+	bool hasNormalMap;
 };
 
 cbuffer CBufferLight : register(b1)
@@ -44,9 +45,10 @@ cbuffer CBufferSpotLight : register(b3)
 	SpotLight spotLight;
 };
 
-Texture2D ObjTexture;
+Texture2D ObjTexture : register(t0);
+Texture2D NormalMap : register(t1);
 SamplerState ObjSamplerState;
-TextureCube SkyBoxTexture;
+TextureCube SkyBoxTexture : register(t2);
 
 struct VS_OUTPUT
 {
@@ -90,13 +92,18 @@ float4 PS(VS_OUTPUT input) : SV_TARGET
 	float3 norLightDir,norSpotLightDir;
 
 	float4 temp;
+	input.Normal = normalize(input.Normal);
 	if(hasTexture == true)
 		temp = ObjTexture.Sample( ObjSamplerState, input.Texture);
 	else
 		temp = difColor;
 	float alpha = temp.a;
 
-	input.Normal = normalize(input.Normal);
+	if(hasNormalMap = true)
+	{
+
+	}
+
 	//ambient light
 	float4 color = light.ambientIntensity * temp;
 	//directional light

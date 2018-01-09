@@ -95,7 +95,9 @@ struct SurfaceMaterial	//group
     int texArrayIndex;	//VertexMsgObjIndex的vector的index，从0开始
     bool hasTexture;	//mtl文件中是否使用texture
     bool isTransparent;	//mtl文件中是否需要blend
+	bool hasNormalMap;	//mtl文件中是否有法线贴图
 	ID3D11ShaderResourceView * shaderResourceView;
+	ID3D11ShaderResourceView * normalMapResourceView;
 };
 struct VertexMsgObjIndex	//从1开始，0表示没有该值
 {
@@ -113,7 +115,9 @@ struct materialMsg	//.mtl文件的mtl数据
 	float transparent;	//透明度，0-1，1是完全不透明
 	bool hasTexture;	//是否使用texture
 	bool isTransparent;	//是否需要blend
+	bool hasNormalMap;	//是否有法线贴图
 	ID3D11ShaderResourceView * shaderResourceView;
+	ID3D11ShaderResourceView * normalMapResourceView;
 };
 
 struct Vertex
@@ -128,6 +132,7 @@ struct ConstSpace
 	XMMATRIX worldSpace;
 	XMFLOAT4 difColor;
 	bool hasTexture;
+	bool hasNormalMap;
 };
 struct Light
 {
@@ -237,10 +242,13 @@ ID3D11Buffer* skyBoxIndexBuffer;
 ID3D11DepthStencilState  *skyboxDepthStencilState;
 
 //model
-ID3D11Buffer *modelVertexBuffer;
-ID3D11Buffer *modelIndexBuffer;
-std::vector<SurfaceMaterial> modelSurMetVec;
+ID3D11Buffer *modelHouseVertexBuffer;
+ID3D11Buffer *modelHouseIndexBuffer;
+std::vector<SurfaceMaterial> modelHouseSurMetVec;
 
+ID3D11Buffer *modelGroundVertexBuffer;
+ID3D11Buffer *modelGroundIndexBuffer;
+std::vector<SurfaceMaterial> modelGroundSurMetVec;
 
 //time
 double timeFrequency = 0.0;	//count
@@ -520,7 +528,7 @@ void DirectxInit()
 	d3dSwapChainDesc.BufferCount = 1;
 	d3dSwapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	d3dSwapChainDesc.OutputWindow = hwnd;
-	d3dSwapChainDesc.Windowed = true;
+	d3dSwapChainDesc.Windowed = true;	//试一下直接改成false？
 	d3dSwapChainDesc.SampleDesc.Count = 1;
 	d3dSwapChainDesc.SampleDesc.Quality = 0;
 
@@ -717,10 +725,13 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 				while(modelFile.get() != '\n' && modelFile);
 				break;
 			case 'g':
-				surMetTemp.hasTexture = false;
 				surMetTemp.matName == L"";
 				surMetTemp.texArrayIndex = indexIndex;
 				surMetTemp.isTransparent = false;
+				surMetTemp.hasNormalMap = false;
+				surMetTemp.hasTexture = false;
+				surMetTemp.normalMapResourceView = NULL;
+				surMetTemp.shaderResourceView = NULL;
 				surMetTemp.difColor = XMFLOAT4(0.0f,0.0f,0.0f,0.0f);
 				surMetVec.push_back(surMetTemp);
 				groupIndex++;
@@ -787,10 +798,13 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 			case 'f':	//暂不考虑超过3个的情况
 				if(indexIndex == 0 && surMetVec.empty())	//如果开始没有group，则这一部分应该也是要作为一个group的
 				{	
-					surMetTemp.hasTexture = false;
 					surMetTemp.matName = L"";
 					surMetTemp.texArrayIndex = 0;
 					surMetTemp.isTransparent = false;
+					surMetTemp.hasNormalMap = false;
+					surMetTemp.hasTexture = false;
+					surMetTemp.shaderResourceView = NULL;
+					surMetTemp.normalMapResourceView = NULL;
 					surMetVec.push_back(surMetTemp);
 					groupIndex++;
 				}
@@ -892,13 +906,15 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 												}
 												if(flagTemp == true)
 												{
-													mtlMsgTemp.hasTexture = false;
 													mtlMsgTemp.ka = XMFLOAT3(0.0f,0.0f,0.0f);
 													mtlMsgTemp.kd = XMFLOAT3(0.0f,0.0f,0.0f);
 													mtlMsgTemp.ks = XMFLOAT3(0.0f,0.0f,0.0f);
 													mtlMsgTemp.shaderResourceView = NULL;
+													mtlMsgTemp.normalMapResourceView = NULL;
 													mtlMsgTemp.transparent = 0.0f;
 													mtlMsgTemp.isTransparent = false;
+													mtlMsgTemp.hasNormalMap = false;
+													mtlMsgTemp.hasTexture = false;
 													mtlVec.push_back(mtlMsgTemp);
 												}
 											}
@@ -974,14 +990,35 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 										if(keyChar == 'a')
 										{
 											mtlFile >> wstrTemp;
-											HR(D3DX11CreateShaderResourceViewFromFile(d3dDevice,wstrTemp.c_str(),NULL,NULL,&(mtlVec.back().shaderResourceView),NULL));
-											mtlVec.back().hasTexture = true;
+											if(!FAILED(D3DX11CreateShaderResourceViewFromFile(d3dDevice,wstrTemp.c_str(),NULL,NULL,&(mtlVec.back().shaderResourceView),NULL)))
+											{
+												mtlVec.back().hasTexture = true;
+											}
 										}
 										else if(keyChar == 'd')
 										{
 											mtlFile >> wstrTemp;
-											HR(D3DX11CreateShaderResourceViewFromFile(d3dDevice,wstrTemp.c_str(),NULL,NULL,&(mtlVec.back().shaderResourceView),NULL));
-											mtlVec.back().hasTexture = true;
+											if(!FAILED(D3DX11CreateShaderResourceViewFromFile(d3dDevice,wstrTemp.c_str(),NULL,NULL,&(mtlVec.back().shaderResourceView),NULL)))
+											{
+												mtlVec.back().hasTexture = true;
+											}
+										}
+									}
+									else if(keyChar == 'b')
+									{
+										if(mtlFile.get() == 'u')
+										{
+											if(mtlFile.get() == 'm')
+											{
+												if(mtlFile.get() == 'p')
+												{
+													mtlFile >> wstrTemp;
+													if(!FAILED(D3DX11CreateShaderResourceViewFromFile(d3dDevice,wstrTemp.c_str(),NULL,NULL,&(mtlVec.back().normalMapResourceView),NULL)))
+													{
+														mtlVec.back().hasNormalMap = true;
+													}
+												}
+											}
 										}
 									}
 									else if(keyChar == 'd')
@@ -1020,7 +1057,9 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 				{
 					surMetVec[i].hasTexture = mtlVec[j].hasTexture;
 					surMetVec[i].isTransparent = mtlVec[j].isTransparent;
+					surMetVec[i].hasNormalMap = mtlVec[j].hasNormalMap;
 					surMetVec[i].shaderResourceView = mtlVec[j].shaderResourceView;
+					surMetVec[i].normalMapResourceView = mtlVec[j].normalMapResourceView;
 					surMetVec[i].difColor = XMFLOAT4(mtlVec[j].ka.x,mtlVec[j].ka.y,mtlVec[j].ka.z,mtlVec[j].transparent);
 					break;
 				}
@@ -1473,8 +1512,9 @@ int CALLBACK WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine
 	WindowInit(hInstance);
 
 	DirectxInit();
-
-	LoadObjModel(L"spaceCompound.obj",modelVertexBuffer,modelIndexBuffer,modelSurMetVec,true);
+	
+	LoadObjModel(L"spaceCompound.obj",modelHouseVertexBuffer,modelHouseIndexBuffer,modelHouseSurMetVec,true);
+	LoadObjModel(L"ground.obj",modelGroundVertexBuffer,modelGroundIndexBuffer,modelGroundSurMetVec,true);
 	InitDirectInput(hInstance);
 	RenderPipeline();
 	messageLoop();
@@ -1555,7 +1595,7 @@ void DrawSkyBox()
 	d3dDeviceContext->VSSetShader(SkyBox_VS,0,0);
 	d3dDeviceContext->RSSetState(rasterState_cwnc);
 	d3dDeviceContext->PSSetShader(SkyBox_PS,0,0);
-	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_skyBox);
+	d3dDeviceContext->PSSetShaderResources(2,1,&shaderResourceView_skyBox);
 	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
 	d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
 	
@@ -1579,7 +1619,8 @@ void DrawScene()
 	DrawSkyBox();
 	
 //画模型不透明部分
-	drawModelNonBlend(modelVertexBuffer,modelIndexBuffer,modelSurMetVec,worldSpace,viewSpace);
+	drawModelNonBlend(modelHouseVertexBuffer,modelHouseIndexBuffer,modelHouseSurMetVec,worldSpace,viewSpace);
+	drawModelNonBlend(modelGroundVertexBuffer,modelGroundIndexBuffer,modelGroundSurMetVec,worldSpace,viewSpace);
 
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
@@ -1594,13 +1635,13 @@ void DrawScene()
 	d3dDeviceContext->UpdateSubresource(constBufferSpotLight,0,NULL,&constSpotLight,0,0);
 	
 //画草地
-	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * projectionMatrix);
-	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
-	constSpace.hasTexture = true;
-	constSpace.difColor = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
-	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
-	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_grass);
-	d3dDeviceContext->DrawIndexed(6,36,0);
+	//constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * projectionMatrix);
+	//constSpace.worldSpace = XMMatrixTranspose(worldSpace);
+	//constSpace.hasTexture = true;
+	//constSpace.difColor = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
+	//d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
+	//d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_grass);
+	//d3dDeviceContext->DrawIndexed(6,36,0);
 
 //画两个立方体
 	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_brain);
@@ -1630,15 +1671,10 @@ void DrawScene()
 	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->DrawIndexed(36,0,0);
-	
-		//d3dDeviceContext->RSSetState(rasterState_cwnc);
-		//d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
-		//d3dDeviceContext->IASetVertexBuffers(0,1,&modelVertexBuffer,&stride,&offset);
-		//d3dDeviceContext->IASetIndexBuffer(modelIndexBuffer,DXGI_FORMAT_R32_UINT,0);
-		//d3dDeviceContext->DrawIndexed(6,0,0);
 
 //画模型透明部分
-	drawModelBlend(modelVertexBuffer,modelIndexBuffer,modelSurMetVec,worldSpace,viewSpace);
+	drawModelBlend(modelHouseVertexBuffer,modelHouseIndexBuffer,modelHouseSurMetVec,worldSpace,viewSpace);
+	drawModelBlend(modelGroundVertexBuffer,modelGroundIndexBuffer,modelGroundSurMetVec,worldSpace,viewSpace);
 
 //显示文本
 	wchar_t timeTemp[120];
@@ -1686,9 +1722,13 @@ void drawModelNonBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std:
 			else
 			{
 				constSpace.difColor = surMetVec[i].difColor;
-				//constSpace.difColor = XMFLOAT4(0.5f,0.5f,0.5f,0.8f);
+			}
+			if(surMetVec[i].hasNormalMap)
+			{
+				d3dDeviceContext->PSSetShaderResources(1,1,&(surMetVec[i].normalMapResourceView));
 			}
 			constSpace.hasTexture = surMetVec[i].hasTexture;
+			constSpace.hasNormalMap = surMetVec[i].hasNormalMap;
 			d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 			d3dDeviceContext->DrawIndexed(indexCount,indexStart,0);
 		}
@@ -1735,7 +1775,12 @@ void drawModelBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::ve
 				constSpace.difColor = surMetVec[i].difColor;
 				//constSpace.difColor = XMFLOAT4(0.5f,0.5f,0.5f,0.8f);
 			}
+			if(surMetVec[i].hasNormalMap)
+			{
+				d3dDeviceContext->PSSetShaderResources(1,1,&(surMetVec[i].normalMapResourceView));
+			}
 			constSpace.hasTexture = surMetVec[i].hasTexture;
+			constSpace.hasNormalMap = surMetVec[i].hasNormalMap;
 			d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 			d3dDeviceContext->DrawIndexed(indexCount,indexStart,0);
 		}
