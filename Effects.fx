@@ -105,11 +105,10 @@ float4 PS(VS_OUTPUT input) : SV_TARGET
 		float3 textureMapNormal;
 		input.Tangent = normalize(input.Tangent);
 		input.Tangent = normalize(input.Tangent - input.Normal * dot(input.Tangent,input.Normal));
-		Bitangent = cross(input.Normal,input.Tangent);	//À≥–Ú£ø
+		Bitangent = cross(input.Normal,input.Tangent);
 		textureMapNormal = NormalMap.Sample( ObjSamplerState, input.Texture);
 		textureMapNormal = -1.0f + 2.0f * textureMapNormal;
 		input.Normal = normalize(mul(textureMapNormal,float3x3(input.Tangent,Bitangent,input.Normal)));
-		//temp = NormalMap.Sample( ObjSamplerState, input.Texture); ≤‚ ‘
 	}
 
 	//ambient light

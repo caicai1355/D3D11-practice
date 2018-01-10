@@ -36,15 +36,15 @@
 #include <comdef.h>
 #endif
 
-#define WIDTH 100
-#define HEIGHT 100 
-#define POS_X 1200 
-#define POS_Y 700
+//#define WIDTH 100
+//#define HEIGHT 100 
+//#define POS_X 1200 
+//#define POS_Y 700
 
-//#define WIDTH 500
-//#define HEIGHT 500 
-//#define POS_X 600 
-//#define POS_Y 200
+#define WIDTH 500
+#define HEIGHT 500 
+#define POS_X 600 
+#define POS_Y 200
 
 //#define LIGHT_TYPE_VERTEX_NORMAL
 #define LIGHT_TYPE_PLANE_NORMAL
@@ -133,8 +133,8 @@ struct ConstSpace
 	XMMATRIX WVP;
 	XMMATRIX worldSpace;
 	XMFLOAT4 difColor;
-	bool hasTexture;
-	bool hasNormalMap;
+	BOOL hasTexture;
+	BOOL hasNormalMap;
 };
 struct Light
 {
@@ -206,7 +206,7 @@ ID3D10Blob* VS_Buffer;
 ID3D10Blob* PS_Buffer;
 ID3D11VertexShader* VS;
 ID3D11PixelShader* PS;
-XMVECTORF32 eyePos = {-1.0f,5.0f,-1.0f,0.0f};
+XMVECTORF32 eyePos = {-1.0f,4.0f,-1.0f,0.0f};
 XMVECTORF32 focusPos = {0.0f,1.0f,0.0f,0.0f};
 XMVECTORF32 upPos = {0.0f,1.0f,0.0f,0.0f};
 FLOAT cameraRotHorizontal = 0.0f;
@@ -1133,10 +1133,28 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 				{
 					/*计算tangent*/
 					textCoorU1 = vertexVec[indexVec[startArray + j + 0]].textureCoordinate.x - vertexVec[indexVec[startArray + j + 1]].textureCoordinate.x;
-					textCoorU2 = vertexVec[indexVec[startArray + j + 0]].textureCoordinate.x - vertexVec[indexVec[startArray + j + 2]].textureCoordinate.x;
 					wordPos1 = XMVectorSubtract(XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 0]].position)),XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 1]].position)));
-					wordPos2 = XMVectorSubtract(XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 0]].position)),XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 2]].position)));
-					tangentTemp = XMVector3Normalize(XMVectorAdd(wordPos1,XMVectorScale(wordPos2,-textCoorU1/textCoorU2)));
+					if(textCoorU1 == 0.0f)
+					{
+						if(vertexVec[indexVec[startArray + j + 0]].textureCoordinate.y - vertexVec[indexVec[startArray + j + 1]].textureCoordinate.y > 0)
+							tangentTemp = XMVector3Normalize(wordPos1);
+						else
+							tangentTemp = -XMVector3Normalize(wordPos1);
+					}
+					else
+					{
+						textCoorU2 = vertexVec[indexVec[startArray + j + 0]].textureCoordinate.x - vertexVec[indexVec[startArray + j + 2]].textureCoordinate.x;
+						wordPos2 = XMVectorSubtract(XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 0]].position)),XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 2]].position)));
+						if(textCoorU2 == 0.0f)
+						{
+							if(vertexVec[indexVec[startArray + j + 0]].textureCoordinate.y - vertexVec[indexVec[startArray + j + 2]].textureCoordinate.y > 0)
+								tangentTemp = XMVector3Normalize(wordPos2);
+							else
+								tangentTemp = -XMVector3Normalize(wordPos2);
+						}
+						else
+							tangentTemp = XMVector3Normalize(XMVectorAdd(wordPos1,XMVectorScale(wordPos2,-textCoorU1/textCoorU2)));
+					}
 
 					for(int k = 0;k < 3;k++)
 					{
@@ -1302,7 +1320,7 @@ bool RenderPipeline()
 	rasterStateDesc.FrontCounterClockwise = false;
 	rasterStateDesc.CullMode = D3D11_CULL_NONE;
 	d3dDevice->CreateRasterizerState(&rasterStateDesc,&rasterState_cwnc);
-	rasterStateDesc.DepthBias = 50;
+	rasterStateDesc.DepthBias = 200;	//50还不够。。。
 	d3dDevice->CreateRasterizerState(&rasterStateDesc,&rasterState_cwnc_bias);
 	//d3dDeviceContext->RSSetState(rasterState_cw);
 
@@ -1647,6 +1665,7 @@ void DrawD2DText(const wchar_t * text)
 	constSpace.WVP = XMMatrixTranspose(XMMatrixIdentity());
 	constSpace.worldSpace = constSpace.WVP;
 	constSpace.hasTexture = true;
+	constSpace.hasNormalMap = false;
 	constSpace.difColor = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 	d3dDeviceContext->VSSetShader(VS,0,0);
@@ -1673,6 +1692,7 @@ void DrawSkyBox()
 	constSpace.WVP = XMMatrixTranspose(worldSpace * XMMatrixScaling(5.0f,5.0f,5.0f) * skyBoxPos * viewSpace * projectionMatrix);
 	constSpace.worldSpace = skyBoxPos;
 	constSpace.hasTexture = true;
+	constSpace.hasNormalMap = false;
 	constSpace.difColor = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 
@@ -1705,12 +1725,13 @@ void DrawScene()
 	d3dDeviceContext->UpdateSubresource(constBufferSpotLight,0,NULL,&constSpotLight,0,0);
 	
 //画草地
-	//constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * projectionMatrix);
-	//constSpace.worldSpace = XMMatrixTranspose(worldSpace);
-	//constSpace.hasTexture = true;
-	//constSpace.difColor = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
-	//d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
-	//d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_grass);
+	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * projectionMatrix);
+	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
+	constSpace.hasTexture = true;
+	constSpace.hasNormalMap = false;
+	constSpace.difColor = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
+	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
+	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_grass);
 	//d3dDeviceContext->DrawIndexed(6,36,0);
 
 //画两个立方体
