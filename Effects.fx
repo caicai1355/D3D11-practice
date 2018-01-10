@@ -56,6 +56,7 @@ struct VS_OUTPUT
 	float4 WorldPos : POSITION;	//试一下改成 SV_POSITION 会怎样，会报错。。。顺便一提这里不用SV是因为不想进行透视除法
 	float2 Texture : TEXCOORD;
 	float3 Normal : NORMAL;
+	float3 Tangent : TANGENT;
 };
 struct VS_SKYBOX_OUTPUT
 {
@@ -64,17 +65,18 @@ struct VS_SKYBOX_OUTPUT
 };
 
 
-VS_OUTPUT VS(float4 inPos : POSITION,float2 inTexture : TEXTURE,float3 inNormal : NORMAL)
+VS_OUTPUT VS(float4 inPos : POSITION,float2 inTexture : TEXTURE,float3 inNormal : NORMAL,float3 inTangent : TANGENT)
 {
 	VS_OUTPUT output;
 	output.Pos = mul(inPos,WVP);
 	output.Texture = inTexture;
 	output.WorldPos = mul(inPos,worldSpace);
 	output.Normal = mul(inNormal,worldSpace);
+	output.Tangent = mul(inTangent,worldSpace);
 	return output;
 }
 
-VS_SKYBOX_OUTPUT SKYBOX_VS(float4 inPos : POSITION,float2 inTexture : TEXTURE,float3 inNormal : NORMAL)
+VS_SKYBOX_OUTPUT SKYBOX_VS(float4 inPos : POSITION,float2 inTexture : TEXTURE)
 {
 	VS_SKYBOX_OUTPUT output;
 	output.Pos = float4(mul(inPos,WVP).xyww);
@@ -84,9 +86,7 @@ VS_SKYBOX_OUTPUT SKYBOX_VS(float4 inPos : POSITION,float2 inTexture : TEXTURE,fl
 
 float4 PS(VS_OUTPUT input) : SV_TARGET
 {
-	//return float4(0.0f, 0.0f, 1.0f, 1.0f);
-    //return float4(ObjTexture.Sample( ObjSamplerState, input.Texture).x,ObjTexture.Sample( ObjSamplerState, input.Texture).y,ObjTexture.Sample( ObjSamplerState, input.Texture).z,0.2f);
-	//clip(temp.a - 0.25);
+
 	float PointD,SpotD;
 	float3 pointLightVector,spotLightVector;
 	float3 norLightDir,norSpotLightDir;
@@ -101,7 +101,15 @@ float4 PS(VS_OUTPUT input) : SV_TARGET
 
 	if(hasNormalMap == true)
 	{
-
+		float3 Bitangent;
+		float3 textureMapNormal;
+		input.Tangent = normalize(input.Tangent);
+		input.Tangent = normalize(input.Tangent - input.Normal * dot(input.Tangent,input.Normal));
+		Bitangent = cross(input.Normal,input.Tangent);	//顺序？
+		textureMapNormal = NormalMap.Sample( ObjSamplerState, input.Texture);
+		textureMapNormal = -1.0f + 2.0f * textureMapNormal;
+		input.Normal = normalize(mul(textureMapNormal,float3x3(input.Tangent,Bitangent,input.Normal)));
+		//temp = NormalMap.Sample( ObjSamplerState, input.Texture); 测试
 	}
 
 	//ambient light
@@ -128,7 +136,7 @@ float4 PS(VS_OUTPUT input) : SV_TARGET
 	}
 	
 	return float4(color.rgb,alpha);
-	//return float4(1.0f - color.w,color.w,1.0f - color.w,color.w);
+	//return float4(0.0f, 0.0f, 1.0f, 1.0f);
 }
 
 float4 D2D_PS(VS_OUTPUT input) : SV_TARGET

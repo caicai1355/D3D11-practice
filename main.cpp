@@ -36,15 +36,15 @@
 #include <comdef.h>
 #endif
 
-//#define WIDTH 100
-//#define HEIGHT 100 
-//#define POS_X 1200 
-//#define POS_Y 700
+#define WIDTH 100
+#define HEIGHT 100 
+#define POS_X 1200 
+#define POS_Y 700
 
-#define WIDTH 500
-#define HEIGHT 500 
-#define POS_X 600 
-#define POS_Y 200
+//#define WIDTH 500
+//#define HEIGHT 500 
+//#define POS_X 600 
+//#define POS_Y 200
 
 //#define LIGHT_TYPE_VERTEX_NORMAL
 #define LIGHT_TYPE_PLANE_NORMAL
@@ -93,6 +93,7 @@ struct SurfaceMaterial	//group
     std::wstring matName;	//usemtl 的名字
     XMFLOAT4 difColor;	//mtl文件中的 ka/kd 项和 d/tr 项的结合
     int texArrayIndex;	//VertexMsgObjIndex的vector的index，从0开始
+	int indexCount;	//group中vertex的数量
     bool hasTexture;	//mtl文件中是否使用texture
     bool isTransparent;	//mtl文件中是否需要blend
 	bool hasNormalMap;	//mtl文件中是否有法线贴图
@@ -125,6 +126,7 @@ struct Vertex
 	XMFLOAT3 position;
 	XMFLOAT2 textureCoordinate;
 	XMFLOAT3 normal;
+	XMFLOAT3 tangent;
 };
 struct ConstSpace
 {
@@ -181,6 +183,7 @@ ID3D11DepthStencilView * depthStencilView;
 ID3D11RasterizerState * rasterState_cw;
 ID3D11RasterizerState * rasterState_acw;
 ID3D11RasterizerState * rasterState_cwnc;
+ID3D11RasterizerState * rasterState_cwnc_bias;
 ID3D11Texture2D *depthStencilTexture;
 ID3D11Buffer* squareVertBuffer;
 ID3D11Buffer* squareIndexBuffer;
@@ -327,42 +330,42 @@ Vertex vertex[] =
 #ifdef LIGHT_TYPE_PLANE_NORMAL
 //平面法向量
 	//two boxes
-	{cubeVertex0,leftUp,XMFLOAT3(0.0f,0.0f,-1.0f)},
-	{cubeVertex1,rightUp,XMFLOAT3(0.0f,0.0f,-1.0f)},
-	{cubeVertex2,leftDown,XMFLOAT3(0.0f,0.0f,-1.0f)},
-	{cubeVertex3,rightDown,XMFLOAT3(0.0f,0.0f,-1.0f)},
+	{cubeVertex0,leftUp,XMFLOAT3(0.0f,0.0f,-1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
+	{cubeVertex1,rightUp,XMFLOAT3(0.0f,0.0f,-1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
+	{cubeVertex2,leftDown,XMFLOAT3(0.0f,0.0f,-1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
+	{cubeVertex3,rightDown,XMFLOAT3(0.0f,0.0f,-1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
 	
-	{cubeVertex4,leftUp,XMFLOAT3(-1.0f,0.0f,0.0f)},
-	{cubeVertex0,rightUp,XMFLOAT3(-1.0f,0.0f,0.0f)},
-	{cubeVertex6,leftDown,XMFLOAT3(-1.0f,0.0f,0.0f)},
-	{cubeVertex2,rightDown,XMFLOAT3(-1.0f,0.0f,0.0f)},
+	{cubeVertex4,leftUp,XMFLOAT3(-1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
+	{cubeVertex0,rightUp,XMFLOAT3(-1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
+	{cubeVertex6,leftDown,XMFLOAT3(-1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
+	{cubeVertex2,rightDown,XMFLOAT3(-1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
 	
-	{cubeVertex4,leftUp,XMFLOAT3(0.0f,1.0f,0.0f)},
-	{cubeVertex5,rightUp,XMFLOAT3(0.0f,1.0f,0.0f)},
-	{cubeVertex0,leftDown,XMFLOAT3(0.0f,1.0f,0.0f)},
-	{cubeVertex1,rightDown,XMFLOAT3(0.0f,1.0f,0.0f)},
+	{cubeVertex4,leftUp,XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
+	{cubeVertex5,rightUp,XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
+	{cubeVertex0,leftDown,XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
+	{cubeVertex1,rightDown,XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
 	
-	{cubeVertex1,leftUp,XMFLOAT3(1.0f,0.0f,0.0f)},
-	{cubeVertex5,rightUp,XMFLOAT3(1.0f,0.0f,0.0f)},
-	{cubeVertex3,leftDown,XMFLOAT3(1.0f,0.0f,0.0f)},
-	{cubeVertex7,rightDown,XMFLOAT3(1.0f,0.0f,0.0f)},
+	{cubeVertex1,leftUp,XMFLOAT3(1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
+	{cubeVertex5,rightUp,XMFLOAT3(1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
+	{cubeVertex3,leftDown,XMFLOAT3(1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
+	{cubeVertex7,rightDown,XMFLOAT3(1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
 	
-	{cubeVertex7,leftUp,XMFLOAT3(0.0f,-1.0f,0.0f)},
-	{cubeVertex6,rightUp,XMFLOAT3(0.0f,-1.0f,0.0f)},
-	{cubeVertex3,leftDown,XMFLOAT3(0.0f,-1.0f,0.0f)},
-	{cubeVertex2,rightDown,XMFLOAT3(0.0f,-1.0f,0.0f)},
+	{cubeVertex7,leftUp,XMFLOAT3(0.0f,-1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
+	{cubeVertex6,rightUp,XMFLOAT3(0.0f,-1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
+	{cubeVertex3,leftDown,XMFLOAT3(0.0f,-1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
+	{cubeVertex2,rightDown,XMFLOAT3(0.0f,-1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
 	
-	{cubeVertex5,leftUp,XMFLOAT3(0.0f,0.0f,1.0f)},
-	{cubeVertex4,rightUp,XMFLOAT3(0.0f,0.0f,1.0f)},
-	{cubeVertex7,leftDown,XMFLOAT3(0.0f,0.0f,1.0f)},
-	{cubeVertex6,rightDown,XMFLOAT3(0.0f,0.0f,1.0f)},
+	{cubeVertex5,leftUp,XMFLOAT3(0.0f,0.0f,1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
+	{cubeVertex4,rightUp,XMFLOAT3(0.0f,0.0f,1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
+	{cubeVertex7,leftDown,XMFLOAT3(0.0f,0.0f,1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
+	{cubeVertex6,rightDown,XMFLOAT3(0.0f,0.0f,1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
 
 	//grass
 #define PLAIN_SIZE 100.0f		
-	{XMFLOAT3(-PLAIN_SIZE,-1.0f,PLAIN_SIZE),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
-	{XMFLOAT3(PLAIN_SIZE,-1.0f,PLAIN_SIZE),XMFLOAT2(PLAIN_SIZE,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
-	{XMFLOAT3(-PLAIN_SIZE,-1.0f,-PLAIN_SIZE),XMFLOAT2(0.0f,PLAIN_SIZE),XMFLOAT3(0.0f,1.0f,0.0f)},
-	{XMFLOAT3(PLAIN_SIZE,-1.0f,-PLAIN_SIZE),XMFLOAT2(PLAIN_SIZE,PLAIN_SIZE),XMFLOAT3(0.0f,1.0f,0.0f)},
+	{XMFLOAT3(-PLAIN_SIZE,-1.0f,PLAIN_SIZE),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
+	{XMFLOAT3(PLAIN_SIZE,-1.0f,PLAIN_SIZE),XMFLOAT2(PLAIN_SIZE,0.0f),XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
+	{XMFLOAT3(-PLAIN_SIZE,-1.0f,-PLAIN_SIZE),XMFLOAT2(0.0f,PLAIN_SIZE),XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
+	{XMFLOAT3(PLAIN_SIZE,-1.0f,-PLAIN_SIZE),XMFLOAT2(PLAIN_SIZE,PLAIN_SIZE),XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
 #endif
 };
 DWORD index[] = 
@@ -391,10 +394,11 @@ DWORD index[] =
 	26,25,27,
 };
 
-D3D11_INPUT_ELEMENT_DESC verDesc[3] = {
+D3D11_INPUT_ELEMENT_DESC verDesc[4] = {
 	{"POSITION",0,DXGI_FORMAT_R32G32B32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0},
 	{"TEXTURE",0,DXGI_FORMAT_R32G32_FLOAT,0,12,D3D11_INPUT_PER_VERTEX_DATA,0},
-	{"NORMAL",0,DXGI_FORMAT_R32G32B32_FLOAT,0,20,D3D11_INPUT_PER_VERTEX_DATA,0}
+	{"NORMAL",0,DXGI_FORMAT_R32G32B32_FLOAT,0,20,D3D11_INPUT_PER_VERTEX_DATA,0},
+	{"TANGENT",0,DXGI_FORMAT_R32G32B32_FLOAT,0,32,D3D11_INPUT_PER_VERTEX_DATA,0}
 };
 
 void D2D_init(IDXGIAdapter1 *Adapter);
@@ -406,8 +410,8 @@ void DetectInput(double time);
 void SkyBoxInit();
 
 bool LoadObjModel(std::wstring filename,ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::vector<SurfaceMaterial> &surMetVec,bool isRHCoord);
-void drawModelNonBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::vector<SurfaceMaterial> &surMetVec,CXMMATRIX worldSpace,CXMMATRIX viewSpace);
-void drawModelBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::vector<SurfaceMaterial> &surMetVec,CXMMATRIX worldSpace,CXMMATRIX viewSpace);
+void drawModelNonBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::vector<SurfaceMaterial> &surMetVec,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);
+void drawModelBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::vector<SurfaceMaterial> &surMetVec,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);
 
 void UpdateScene(double currentFrameTime);
 void DrawScene();
@@ -730,6 +734,8 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 				else
 					surMetTemp.matName == L"";
 				surMetTemp.texArrayIndex = indexIndex;
+				if(surMetVec.size() != 0)
+					surMetVec.back().indexCount = indexIndex - surMetVec.back().texArrayIndex;
 				surMetTemp.isTransparent = false;
 				surMetTemp.hasNormalMap = false;
 				surMetTemp.hasTexture = false;
@@ -871,6 +877,7 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 				break;
 			}
 		}
+		surMetVec.back().indexCount = indexIndex - surMetVec.back().texArrayIndex;
 
 		//循环读取mtl文件
 		for(unsigned i = 0,len = mtlLibVec.size();i < len;i++)
@@ -1108,6 +1115,51 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 			vertexVec.push_back(vertexTemp);
 		}
 
+		/*计算tangent，如果和原vertex已经算过了tangent，且和当前算好的不一样，则需要创建新的vertex，添加到队列的最后并修改对应的index*/
+		std::vector<bool> isCalcTangent;
+		float textCoorU1,textCoorU2;
+		XMVECTOR wordPos1,wordPos2;
+		XMVECTOR tangentTemp;
+		for(int i = 0,len = vertexVec.size();i < len;i++)
+		{
+			isCalcTangent.push_back(false);
+		}
+		for(int i = 0,len = surMetVec.size(),startArray;i < len;i++)
+		{
+			if(surMetVec[i].hasNormalMap)
+			{
+				startArray = surMetVec[i].texArrayIndex;
+				for(int j = 0;j < surMetVec[i].indexCount;j+=3)
+				{
+					/*计算tangent*/
+					textCoorU1 = vertexVec[indexVec[startArray + j + 0]].textureCoordinate.x - vertexVec[indexVec[startArray + j + 1]].textureCoordinate.x;
+					textCoorU2 = vertexVec[indexVec[startArray + j + 0]].textureCoordinate.x - vertexVec[indexVec[startArray + j + 2]].textureCoordinate.x;
+					wordPos1 = XMVectorSubtract(XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 0]].position)),XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 1]].position)));
+					wordPos2 = XMVectorSubtract(XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 0]].position)),XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 2]].position)));
+					tangentTemp = XMVector3Normalize(XMVectorAdd(wordPos1,XMVectorScale(wordPos2,-textCoorU1/textCoorU2)));
+
+					for(int k = 0;k < 3;k++)
+					{
+						if(!isCalcTangent[indexVec[startArray + j + k]])
+						{
+							XMStoreFloat3(&(vertexVec[indexVec[startArray + j + k]].tangent),tangentTemp);
+							isCalcTangent[indexVec[startArray + j + k]] = true;
+						}
+						else if(!XMVector3Equal(XMLoadFloat3(&(vertexVec[indexVec[startArray + j + k]].tangent)),tangentTemp))
+						{
+							vertexTemp.position = vertexVec[indexVec[startArray + j + k]].position;
+							vertexTemp.textureCoordinate = vertexVec[indexVec[startArray + j + k]].textureCoordinate;
+							vertexTemp.normal = vertexVec[indexVec[startArray + j + k]].normal;
+							XMStoreFloat3(&(vertexTemp.tangent),tangentTemp);
+							vertexVec.push_back(vertexTemp);
+							isCalcTangent.push_back(true);
+							indexVec[startArray + j + k] = vertexVec.size() + 1;
+						}
+					}
+				}
+			}
+		}
+
 		/*可以补充法向量的自动获取*/
 
 		HRESULT hr;
@@ -1240,7 +1292,7 @@ bool RenderPipeline()
 	//rasterStateDesc.FillMode = D3D11_FILL_WIREFRAME;
 	rasterStateDesc.DepthClipEnable = true;
 	//rasterStateDesc.DepthBiasClamp = -0.1;
-	//rasterStateDesc.DepthBias = 1;
+	rasterStateDesc.DepthBias = 0;
 	rasterStateDesc.FillMode = D3D11_FILL_SOLID;
 	rasterStateDesc.CullMode = D3D11_CULL_BACK;
 	rasterStateDesc.FrontCounterClockwise = false;
@@ -1250,6 +1302,8 @@ bool RenderPipeline()
 	rasterStateDesc.FrontCounterClockwise = false;
 	rasterStateDesc.CullMode = D3D11_CULL_NONE;
 	d3dDevice->CreateRasterizerState(&rasterStateDesc,&rasterState_cwnc);
+	rasterStateDesc.DepthBias = 50;
+	d3dDevice->CreateRasterizerState(&rasterStateDesc,&rasterState_cwnc_bias);
 	//d3dDeviceContext->RSSetState(rasterState_cw);
 
 //常量缓存部分（空间变换和光照）
@@ -1635,8 +1689,8 @@ void DrawScene()
 	DrawSkyBox();
 	
 //画模型不透明部分
-	drawModelNonBlend(modelGroundVertexBuffer,modelGroundIndexBuffer,modelGroundSurMetVec,worldSpace,viewSpace);
-	drawModelNonBlend(modelHouseVertexBuffer,modelHouseIndexBuffer,modelHouseSurMetVec,worldSpace,viewSpace);
+	drawModelNonBlend(modelGroundVertexBuffer,modelGroundIndexBuffer,modelGroundSurMetVec,worldSpace,viewSpace,true);
+	drawModelNonBlend(modelHouseVertexBuffer,modelHouseIndexBuffer,modelHouseSurMetVec,worldSpace,viewSpace,false);
 
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
@@ -1689,8 +1743,8 @@ void DrawScene()
 	d3dDeviceContext->DrawIndexed(36,0,0);
 
 //画模型透明部分
-	drawModelBlend(modelGroundVertexBuffer,modelGroundIndexBuffer,modelGroundSurMetVec,worldSpace,viewSpace);
-	drawModelBlend(modelHouseVertexBuffer,modelHouseIndexBuffer,modelHouseSurMetVec,worldSpace,viewSpace);
+	drawModelBlend(modelGroundVertexBuffer,modelGroundIndexBuffer,modelGroundSurMetVec,worldSpace,viewSpace,true);
+	drawModelBlend(modelHouseVertexBuffer,modelHouseIndexBuffer,modelHouseSurMetVec,worldSpace,viewSpace,false);
 
 //显示文本
 	wchar_t timeTemp[120];
@@ -1700,7 +1754,7 @@ void DrawScene()
 	d3dSwapChain->Present(0,0);
 }
 
-void drawModelNonBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::vector<SurfaceMaterial> &surMetVec,CXMMATRIX worldSpace,CXMMATRIX viewSpace)
+void drawModelNonBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::vector<SurfaceMaterial> &surMetVec,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias)
 {
 	UINT indexStart = 0;
 	UINT indexCount = 0;
@@ -1710,7 +1764,10 @@ void drawModelNonBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std:
 	d3dDeviceContext->IASetVertexBuffers(0,1,&vertBuffer,&stride,&offset);
 	d3dDeviceContext->IASetIndexBuffer(indexBuffer,DXGI_FORMAT_R32_UINT,0);
 	d3dDeviceContext->VSSetShader(VS,0,0);
-	d3dDeviceContext->RSSetState(rasterState_cwnc);
+	if(isBias)
+		d3dDeviceContext->RSSetState(rasterState_cwnc_bias);
+	else
+		d3dDeviceContext->RSSetState(rasterState_cwnc);
 	d3dDeviceContext->PSSetShader(PS,0,0);
 	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
 	d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
@@ -1721,16 +1778,7 @@ void drawModelNonBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std:
 		if(surMetVec[i].isTransparent == false)
 		{
 			indexStart = surMetVec[i].texArrayIndex;
-			if(i == len - 1)
-			{
-				D3D11_BUFFER_DESC bufDescTemp;
-				indexBuffer->GetDesc(&bufDescTemp);
-				indexCount = bufDescTemp.ByteWidth - surMetVec[i].texArrayIndex;
-			}
-			else
-			{
-				indexCount = surMetVec[i+1].texArrayIndex - surMetVec[i].texArrayIndex;
-			}
+			indexCount = surMetVec[i].indexCount;
 			if(surMetVec[i].hasTexture == true)
 			{
 				d3dDeviceContext->PSSetShaderResources(0,1,&(surMetVec[i].shaderResourceView));
@@ -1751,7 +1799,7 @@ void drawModelNonBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std:
 	}
 }
 
-void drawModelBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::vector<SurfaceMaterial> &surMetVec,CXMMATRIX worldSpace,CXMMATRIX viewSpace)
+void drawModelBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::vector<SurfaceMaterial> &surMetVec,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias)
 {
 	UINT indexStart = 0;
 	UINT indexCount = 0;
@@ -1761,7 +1809,10 @@ void drawModelBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::ve
 	d3dDeviceContext->IASetVertexBuffers(0,1,&vertBuffer,&stride,&offset);
 	d3dDeviceContext->IASetIndexBuffer(indexBuffer,DXGI_FORMAT_R32_UINT,0);
 	d3dDeviceContext->VSSetShader(VS,0,0);
-	d3dDeviceContext->RSSetState(rasterState_cwnc);
+	if(isBias)
+		d3dDeviceContext->RSSetState(rasterState_cwnc_bias);
+	else
+		d3dDeviceContext->RSSetState(rasterState_cwnc);
 	d3dDeviceContext->PSSetShader(PS,0,0);
 	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
 	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * projectionMatrix);
@@ -1772,16 +1823,7 @@ void drawModelBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::ve
 		if(surMetVec[i].isTransparent == true)
 		{
 			indexStart = surMetVec[i].texArrayIndex;
-			if(i == len - 1)
-			{
-				D3D11_BUFFER_DESC bufDescTemp;
-				indexBuffer->GetDesc(&bufDescTemp);
-				indexCount = bufDescTemp.ByteWidth - surMetVec[i].texArrayIndex;
-			}
-			else
-			{
-				indexCount = surMetVec[i+1].texArrayIndex - surMetVec[i].texArrayIndex;
-			}
+			indexCount = surMetVec[i].indexCount;
 			if(surMetVec[i].hasTexture == true)
 			{
 				d3dDeviceContext->PSSetShaderResources(0,1,&(surMetVec[i].shaderResourceView));
