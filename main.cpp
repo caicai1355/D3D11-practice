@@ -36,15 +36,15 @@
 #include <comdef.h>
 #endif
 
-//#define WIDTH 100
-//#define HEIGHT 100 
-//#define POS_X 1200 
-//#define POS_Y 700
+#define WIDTH 100
+#define HEIGHT 100 
+#define POS_X 1200 
+#define POS_Y 700
 
-#define WIDTH 500
-#define HEIGHT 500 
-#define POS_X 600 
-#define POS_Y 200
+//#define WIDTH 500
+//#define HEIGHT 500 
+//#define POS_X 600 
+//#define POS_Y 200
 
 //#define LIGHT_TYPE_VERTEX_NORMAL
 #define LIGHT_TYPE_PLANE_NORMAL
@@ -253,6 +253,10 @@ ID3D11Buffer *modelGroundVertexBuffer;
 ID3D11Buffer *modelGroundIndexBuffer;
 std::vector<SurfaceMaterial> modelGroundSurMetVec;
 
+//raycast
+XMVECTORF32 rayPointEye;
+XMVECTORF32 rayPointDir; 
+
 //time
 double timeFrequency = 0.0;	//count
 double startTime = 0.0;	//count
@@ -414,6 +418,7 @@ void drawModelNonBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std:
 void drawModelBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::vector<SurfaceMaterial> &surMetVec,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);
 
 void UpdateScene(double currentFrameTime);
+void GetRayCast();
 void DrawScene();
 
 LRESULT CALLBACK WinProc(HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam)
@@ -481,6 +486,7 @@ void messageLoop()
 			currentFrameTime = getFrameTime();
 			DetectInput(currentFrameTime);
 			UpdateScene(currentFrameTime);
+			GetRayCast();
 			DrawScene();
 		}
 	}
@@ -1132,29 +1138,35 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 				for(int j = 0;j < surMetVec[i].indexCount;j+=3)
 				{
 					/*¼ÆËãtangent*/
+					//textCoorU1 = vertexVec[indexVec[startArray + j + 0]].textureCoordinate.x - vertexVec[indexVec[startArray + j + 1]].textureCoordinate.x;
+					//wordPos1 = XMVectorSubtract(XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 0]].position)),XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 1]].position)));
+					//if(textCoorU1 == 0.0f)
+					//{
+					//	if(vertexVec[indexVec[startArray + j + 0]].textureCoordinate.y - vertexVec[indexVec[startArray + j + 1]].textureCoordinate.y > 0)
+					//		tangentTemp = XMVector3Normalize(wordPos1);
+					//	else
+					//		tangentTemp = -XMVector3Normalize(wordPos1);
+					//}
+					//else
+					//{
+					//	textCoorU2 = vertexVec[indexVec[startArray + j + 0]].textureCoordinate.x - vertexVec[indexVec[startArray + j + 2]].textureCoordinate.x;
+					//	wordPos2 = XMVectorSubtract(XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 0]].position)),XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 2]].position)));
+					//	if(textCoorU2 == 0.0f)
+					//	{
+					//		if(vertexVec[indexVec[startArray + j + 0]].textureCoordinate.y - vertexVec[indexVec[startArray + j + 2]].textureCoordinate.y > 0)
+					//			tangentTemp = XMVector3Normalize(wordPos2);
+					//		else
+					//			tangentTemp = -XMVector3Normalize(wordPos2);
+					//	}
+					//	else
+					//		tangentTemp = XMVector3Normalize(XMVectorAdd(XMVectorScale(wordPos1,textCoorU2),XMVectorScale(wordPos2,-textCoorU1)));
+					//}
+					
 					textCoorU1 = vertexVec[indexVec[startArray + j + 0]].textureCoordinate.x - vertexVec[indexVec[startArray + j + 1]].textureCoordinate.x;
 					wordPos1 = XMVectorSubtract(XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 0]].position)),XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 1]].position)));
-					if(textCoorU1 == 0.0f)
-					{
-						if(vertexVec[indexVec[startArray + j + 0]].textureCoordinate.y - vertexVec[indexVec[startArray + j + 1]].textureCoordinate.y > 0)
-							tangentTemp = XMVector3Normalize(wordPos1);
-						else
-							tangentTemp = -XMVector3Normalize(wordPos1);
-					}
-					else
-					{
-						textCoorU2 = vertexVec[indexVec[startArray + j + 0]].textureCoordinate.x - vertexVec[indexVec[startArray + j + 2]].textureCoordinate.x;
-						wordPos2 = XMVectorSubtract(XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 0]].position)),XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 2]].position)));
-						if(textCoorU2 == 0.0f)
-						{
-							if(vertexVec[indexVec[startArray + j + 0]].textureCoordinate.y - vertexVec[indexVec[startArray + j + 2]].textureCoordinate.y > 0)
-								tangentTemp = XMVector3Normalize(wordPos2);
-							else
-								tangentTemp = -XMVector3Normalize(wordPos2);
-						}
-						else
-							tangentTemp = XMVector3Normalize(XMVectorAdd(wordPos1,XMVectorScale(wordPos2,-textCoorU1/textCoorU2)));
-					}
+					textCoorU2 = vertexVec[indexVec[startArray + j + 0]].textureCoordinate.x - vertexVec[indexVec[startArray + j + 2]].textureCoordinate.x;
+					wordPos2 = XMVectorSubtract(XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 0]].position)),XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 2]].position)));
+					tangentTemp = XMVector3Normalize(XMVectorAdd(XMVectorScale(wordPos1,textCoorU2),XMVectorScale(wordPos2,-textCoorU1)));
 
 					for(int k = 0;k < 3;k++)
 					{
@@ -1598,7 +1610,6 @@ void IAInitText()
 int CALLBACK WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine,int nCmdShow)
 {
 	WindowInit(hInstance);
-
 	DirectxInit();
 	
 	LoadObjModel(L"spaceCompound.obj",modelHouseVertexBuffer,modelHouseIndexBuffer,modelHouseSurMetVec,true);
@@ -1932,4 +1943,29 @@ void DetectInput(double time)
 	}
 	focusPos.v = eyePos.v + cameraDir.v;
 	viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
+}
+
+void GetRayCast()
+{
+	POINT mousePos;
+
+	/*get the screen coord*/
+	GetCursorPos(&mousePos);
+	ScreenToClient(hwnd, &mousePos);
+
+	/*change to view space*/
+	XMFLOAT2 ndcPoint;
+	XMVECTORF32 viewPoint;
+	ndcPoint.x = (mousePos.x * 2.0f / WIDTH - 1.0f);
+	ndcPoint.y = (mousePos.y * 2.0f / WIDTH - 1.0f);
+	viewPoint.f[0] = ndcPoint.x / projectionMatrix(0,0);
+	viewPoint.f[1] = ndcPoint.y / projectionMatrix(0,0);
+	viewPoint.f[2] = 1.0f;
+
+	/*change to world space and produce two point*/
+	XMMATRIX inverseViewSpace;
+	XMVECTOR vectorTemp;
+	inverseViewSpace = XMMatrixInverse(&vectorTemp,viewSpace);
+	rayPointEye.v = XMVector3Transform(XMVectorZero(),inverseViewSpace);
+	rayPointDir.v = XMVector3Transform(viewPoint.v,inverseViewSpace);
 }
