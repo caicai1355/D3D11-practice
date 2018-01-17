@@ -107,7 +107,7 @@ struct VertexMsgObjIndex	//从1开始，0表示没有该值
 	DWORD normalIdx;
 };
 
-struct materialMsg	//.mtl文件的mtl数据
+struct MaterialMsg	//.mtl文件的mtl数据
 {
 	std::wstring mtlName;	//newmtl 的名字
 	XMFLOAT3 ka;
@@ -174,6 +174,20 @@ struct ConstSpotLight
 	SpotLight spotLight;
 };
 
+struct ModelData
+{
+	ModelData()
+	{
+		isInit = false;
+	}
+	ID3D11Buffer *modelVertexBuffer;
+	ID3D11Buffer *modelIndexBuffer;
+	std::vector<SurfaceMaterial> modelSurMetVec;
+	std::vector<Vertex> vertexVec;	//生成的vertex序列
+	std::vector<DWORD> indexVec;	//vertMsgVec里面的vertex信息对应的index序列（其实也是最终的用来构造index的序列）
+	bool isInit;
+};
+
 HWND hwnd;
 IDXGISwapChain * d3dSwapChain;
 ID3D11Device * d3dDevice;
@@ -206,7 +220,7 @@ ID3D10Blob* VS_Buffer;
 ID3D10Blob* PS_Buffer;
 ID3D11VertexShader* VS;
 ID3D11PixelShader* PS;
-XMVECTORF32 eyePos = {-1.0f,4.0f,-1.0f,0.0f};
+XMVECTORF32 eyePos = {-1.0f,1.0f,-1.0f,0.0f};
 XMVECTORF32 focusPos = {0.0f,1.0f,0.0f,0.0f};
 XMVECTORF32 upPos = {0.0f,1.0f,0.0f,0.0f};
 FLOAT cameraRotHorizontal = 0.0f;
@@ -232,6 +246,7 @@ IDXGIKeyedMutex * keyMutex10;
 LPDIRECTINPUT8 directInput;
 IDirectInputDevice8 * mouseDevice;
 IDirectInputDevice8 * keyboardDevice;
+bool isMouseClicked = false;
 
 //skyBox
 ID3D10Blob* SkyBox_VS_Buffer;
@@ -245,13 +260,9 @@ ID3D11Buffer* skyBoxIndexBuffer;
 ID3D11DepthStencilState  *skyboxDepthStencilState;
 
 //model
-ID3D11Buffer *modelHouseVertexBuffer;
-ID3D11Buffer *modelHouseIndexBuffer;
-std::vector<SurfaceMaterial> modelHouseSurMetVec;
-
-ID3D11Buffer *modelGroundVertexBuffer;
-ID3D11Buffer *modelGroundIndexBuffer;
-std::vector<SurfaceMaterial> modelGroundSurMetVec;
+struct ModelData modelHouse;
+struct ModelData modelGround;
+struct ModelData modelBottle;
 
 //raycast
 XMVECTORF32 rayPointEye;
@@ -413,9 +424,11 @@ void DetectInput(double time);
 
 void SkyBoxInit();
 
-bool LoadObjModel(std::wstring filename,ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::vector<SurfaceMaterial> &surMetVec,bool isRHCoord);
-void drawModelNonBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::vector<SurfaceMaterial> &surMetVec,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);
-void drawModelBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::vector<SurfaceMaterial> &surMetVec,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);
+bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoord);
+void DrawModelNonBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);
+void DrawModelBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);
+
+void DrawBottle(bool isBlend);
 
 void UpdateScene(double currentFrameTime);
 void GetRayCast();
@@ -657,10 +670,8 @@ void D2D_init(IDXGIAdapter1 *Adapter)
 	d3dDevice->CreateShaderResourceView(myTestTexture,NULL,&shaderResourceView_text);
 }
 
-bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *&indexBuffer,std::vector<SurfaceMaterial> &surMetVec,bool isRHCoord)
+bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoord)
 {
-	std::vector<Vertex> vertexVec;		//生成的vertex序列
-	std::vector<DWORD> indexVec;		//vertMsgVec里面的vertex信息对应的index序列（其实也是最终的用来构造index的序列）
 	std::vector<VertexMsgObjIndex> vertMsgVec;	//obj文件里 f 字段的组合结构体以不重复的形式保存的vertex信息序列
 	std::vector<XMFLOAT3> posVec;	//obj文件对应排列下来的vertex信息
 	std::vector<XMFLOAT2> texCooVec;	//obj文件对应排列下来的texture coordinate信息
@@ -668,7 +679,7 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 
 	std::wifstream modelFile(filename);
 	std::vector<std::wstring> mtlLibVec;	//obj文件里引用的lib
-	std::vector<materialMsg> mtlVec;	//mtl里的每一个不重复的mtl的属性结构体
+	std::vector<MaterialMsg> mtlVec;	//mtl里的每一个不重复的mtl的属性结构体
 
 	int indexIndex = 0;	//记录当前提取到了第几个 f (index)
 	int groupIndex = 0;	//记录当前提取到了第几个 g (group)
@@ -676,7 +687,7 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 	std::wstring wstrTemp;
 	SurfaceMaterial surMetTemp;
 	VertexMsgObjIndex verMsgObjTemp;
-	materialMsg mtlMsgTemp;
+	MaterialMsg mtlMsgTemp;
 	Vertex vertexTemp;
 	DWORD verTemp;
 	DWORD texCoorTemp;
@@ -735,20 +746,20 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 				while(modelFile.get() != '\n' && modelFile);
 				break;
 			case 'g':
-				if(surMetVec.size() > 0)
-					surMetTemp.matName == surMetVec.back().matName;	//这里表示默认用上面的除非有usemtl（其实好像直接不赋值就已经是上一个了？）
+				if(modelData->modelSurMetVec.size() > 0)
+					surMetTemp.matName == modelData->modelSurMetVec.back().matName;	//这里表示默认用上面的除非有usemtl（其实好像直接不赋值就已经是上一个了？）
 				else
 					surMetTemp.matName == L"";
 				surMetTemp.texArrayIndex = indexIndex;
-				if(surMetVec.size() != 0)
-					surMetVec.back().indexCount = indexIndex - surMetVec.back().texArrayIndex;
+				if(modelData->modelSurMetVec.size() != 0)
+					modelData->modelSurMetVec.back().indexCount = indexIndex - modelData->modelSurMetVec.back().texArrayIndex;
 				surMetTemp.isTransparent = false;
 				surMetTemp.hasNormalMap = false;
 				surMetTemp.hasTexture = false;
 				surMetTemp.normalMapResourceView = NULL;
 				surMetTemp.shaderResourceView = NULL;
 				surMetTemp.difColor = XMFLOAT4(0.0f,0.0f,0.0f,0.0f);
-				surMetVec.push_back(surMetTemp);
+				modelData->modelSurMetVec.push_back(surMetTemp);
 				groupIndex++;
 				while(modelFile.get() != '\n' && modelFile);
 				break;
@@ -766,7 +777,7 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 									if(modelFile.get() == ' ')
 									{
 										modelFile >> wstrTemp; //Get next type (string)
-										surMetVec.back().matName = wstrTemp;
+										modelData->modelSurMetVec.back().matName = wstrTemp;
 									}
 								}
 							}
@@ -811,7 +822,7 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 				while(modelFile.get() != '\n' && modelFile);
 				break;
 			case 'f':	//暂不考虑超过3个的情况
-				if(indexIndex == 0 && surMetVec.empty())	//如果开始没有group，则这一部分应该也是要作为一个group的
+				if(indexIndex == 0 && modelData->modelSurMetVec.empty())	//如果开始没有group，则这一部分应该也是要作为一个group的
 				{	
 					surMetTemp.matName = L"";
 					surMetTemp.texArrayIndex = 0;
@@ -820,7 +831,7 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 					surMetTemp.hasTexture = false;
 					surMetTemp.shaderResourceView = NULL;
 					surMetTemp.normalMapResourceView = NULL;
-					surMetVec.push_back(surMetTemp);
+					modelData->modelSurMetVec.push_back(surMetTemp);
 					groupIndex++;
 				}
 				for(int i = 0;i < 3;i++)	//循环获取3个vertex的属性
@@ -860,7 +871,7 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 						if(vertMsgVec[i].verIdx == verTemp && vertMsgVec[i].texCoorIdx == texCoorTemp && vertMsgVec[i].normalIdx == normalTemp)
 						{
 							flagTemp = true;
-							indexVec.push_back(i);
+							modelData->indexVec.push_back(i);
 						}
 					}
 					if(flagTemp == false)	//没有的话就创建一个VertexMsgObjIndex结构体并添加新数据，然后将对应index赋值过去
@@ -869,7 +880,7 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 						verMsgObjTemp.texCoorIdx = texCoorTemp;
 						verMsgObjTemp.normalIdx = normalTemp;
 						vertMsgVec.push_back(verMsgObjTemp);
-						indexVec.push_back(vertMsgVec.size()-1);
+						modelData->indexVec.push_back(vertMsgVec.size()-1);
 					}
 					indexIndex++;
 				}
@@ -883,7 +894,7 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 				break;
 			}
 		}
-		surMetVec.back().indexCount = indexIndex - surMetVec.back().texArrayIndex;
+		modelData->modelSurMetVec.back().indexCount = indexIndex - modelData->modelSurMetVec.back().texArrayIndex;
 
 		//循环读取mtl文件
 		for(unsigned i = 0,len = mtlLibVec.size();i < len;i++)
@@ -1065,31 +1076,31 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 		}
 
 		//group根据名字获取对应netmtl的数据
-		for(int i = 0,len_surM = surMetVec.size();i < len_surM;i++)
+		for(int i = 0,len_surM = modelData->modelSurMetVec.size();i < len_surM;i++)
 		{
 			flagTemp = false;
 			for(int j = 0,len_mat = mtlVec.size();j < len_mat;j++)
 			{
-				if(surMetVec[i].matName == mtlVec[j].mtlName)
+				if(modelData->modelSurMetVec[i].matName == mtlVec[j].mtlName)
 				{
-					surMetVec[i].hasTexture = mtlVec[j].hasTexture;
-					surMetVec[i].isTransparent = mtlVec[j].isTransparent;
-					surMetVec[i].hasNormalMap = mtlVec[j].hasNormalMap;
-					surMetVec[i].shaderResourceView = mtlVec[j].shaderResourceView;
-					surMetVec[i].normalMapResourceView = mtlVec[j].normalMapResourceView;
-					surMetVec[i].difColor = XMFLOAT4(mtlVec[j].ka.x,mtlVec[j].ka.y,mtlVec[j].ka.z,mtlVec[j].transparent);
+					modelData->modelSurMetVec[i].hasTexture = mtlVec[j].hasTexture;
+					modelData->modelSurMetVec[i].isTransparent = mtlVec[j].isTransparent;
+					modelData->modelSurMetVec[i].hasNormalMap = mtlVec[j].hasNormalMap;
+					modelData->modelSurMetVec[i].shaderResourceView = mtlVec[j].shaderResourceView;
+					modelData->modelSurMetVec[i].normalMapResourceView = mtlVec[j].normalMapResourceView;
+					modelData->modelSurMetVec[i].difColor = XMFLOAT4(mtlVec[j].ka.x,mtlVec[j].ka.y,mtlVec[j].ka.z,mtlVec[j].transparent);
 					flagTemp = true;
 					break;
 				}
 			}
 			if(flagTemp == false && mtlVec.size() > 0)	//例子上写的是如果找不到匹配的话就默认用第一个（我先照着这么做。。。）
 			{
-				surMetVec[i].hasTexture = mtlVec[0].hasTexture;
-				surMetVec[i].isTransparent = mtlVec[0].isTransparent;
-				surMetVec[i].hasNormalMap = mtlVec[0].hasNormalMap;
-				surMetVec[i].shaderResourceView = mtlVec[0].shaderResourceView;
-				surMetVec[i].normalMapResourceView = mtlVec[0].normalMapResourceView;
-				surMetVec[i].difColor = XMFLOAT4(mtlVec[0].ka.x,mtlVec[0].ka.y,mtlVec[0].ka.z,mtlVec[0].transparent);
+				modelData->modelSurMetVec[i].hasTexture = mtlVec[0].hasTexture;
+				modelData->modelSurMetVec[i].isTransparent = mtlVec[0].isTransparent;
+				modelData->modelSurMetVec[i].hasNormalMap = mtlVec[0].hasNormalMap;
+				modelData->modelSurMetVec[i].shaderResourceView = mtlVec[0].shaderResourceView;
+				modelData->modelSurMetVec[i].normalMapResourceView = mtlVec[0].normalMapResourceView;
+				modelData->modelSurMetVec[i].difColor = XMFLOAT4(mtlVec[0].ka.x,mtlVec[0].ka.y,mtlVec[0].ka.z,mtlVec[0].transparent);
 			}
 		}
 
@@ -1118,7 +1129,7 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 			{
 				vertexTemp.normal = vertexTemp.position;
 			}
-			vertexVec.push_back(vertexTemp);
+			modelData->vertexVec.push_back(vertexTemp);
 		}
 
 		/*计算tangent，如果和原vertex已经算过了tangent，且和当前算好的不一样，则需要创建新的vertex，添加到队列的最后并修改对应的index*/
@@ -1126,34 +1137,34 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 		float textCoorU1,textCoorU2;
 		XMVECTOR wordPos1,wordPos2;
 		XMVECTOR tangentTemp;
-		for(int i = 0,len = vertexVec.size();i < len;i++)
+		for(int i = 0,len = modelData->vertexVec.size();i < len;i++)
 		{
 			isCalcTangent.push_back(false);
 		}
-		for(int i = 0,len = surMetVec.size(),startArray;i < len;i++)
+		for(int i = 0,len = modelData->modelSurMetVec.size(),startArray;i < len;i++)
 		{
-			if(surMetVec[i].hasNormalMap)
+			if(modelData->modelSurMetVec[i].hasNormalMap)
 			{
-				startArray = surMetVec[i].texArrayIndex;
-				for(int j = 0;j < surMetVec[i].indexCount;j+=3)
+				startArray = modelData->modelSurMetVec[i].texArrayIndex;
+				for(int j = 0;j < modelData->modelSurMetVec[i].indexCount;j+=3)
 				{
 					/*计算tangent*/
-					//textCoorU1 = vertexVec[indexVec[startArray + j + 0]].textureCoordinate.x - vertexVec[indexVec[startArray + j + 1]].textureCoordinate.x;
-					//wordPos1 = XMVectorSubtract(XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 0]].position)),XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 1]].position)));
+					//textCoorU1 = modelData->vertexVec[modelData->indexVec[startArray + j + 0]].textureCoordinate.x - modelData->vertexVec[modelData->indexVec[startArray + j + 1]].textureCoordinate.x;
+					//wordPos1 = XMVectorSubtract(XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[startArray + j + 0]].position)),XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[startArray + j + 1]].position)));
 					//if(textCoorU1 == 0.0f)
 					//{
-					//	if(vertexVec[indexVec[startArray + j + 0]].textureCoordinate.y - vertexVec[indexVec[startArray + j + 1]].textureCoordinate.y > 0)
+					//	if(modelData->vertexVec[modelData->indexVec[startArray + j + 0]].textureCoordinate.y - modelData->vertexVec[modelData->indexVec[startArray + j + 1]].textureCoordinate.y > 0)
 					//		tangentTemp = XMVector3Normalize(wordPos1);
 					//	else
 					//		tangentTemp = -XMVector3Normalize(wordPos1);
 					//}
 					//else
 					//{
-					//	textCoorU2 = vertexVec[indexVec[startArray + j + 0]].textureCoordinate.x - vertexVec[indexVec[startArray + j + 2]].textureCoordinate.x;
-					//	wordPos2 = XMVectorSubtract(XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 0]].position)),XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 2]].position)));
+					//	textCoorU2 = modelData->vertexVec[modelData->indexVec[startArray + j + 0]].textureCoordinate.x - modelData->vertexVec[modelData->indexVec[startArray + j + 2]].textureCoordinate.x;
+					//	wordPos2 = XMVectorSubtract(XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[startArray + j + 0]].position)),XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[startArray + j + 2]].position)));
 					//	if(textCoorU2 == 0.0f)
 					//	{
-					//		if(vertexVec[indexVec[startArray + j + 0]].textureCoordinate.y - vertexVec[indexVec[startArray + j + 2]].textureCoordinate.y > 0)
+					//		if(modelData->vertexVec[modelData->indexVec[startArray + j + 0]].textureCoordinate.y - modelData->vertexVec[modelData->indexVec[startArray + j + 2]].textureCoordinate.y > 0)
 					//			tangentTemp = XMVector3Normalize(wordPos2);
 					//		else
 					//			tangentTemp = -XMVector3Normalize(wordPos2);
@@ -1162,28 +1173,28 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 					//		tangentTemp = XMVector3Normalize(XMVectorAdd(XMVectorScale(wordPos1,textCoorU2),XMVectorScale(wordPos2,-textCoorU1)));
 					//}
 					
-					textCoorU1 = vertexVec[indexVec[startArray + j + 0]].textureCoordinate.x - vertexVec[indexVec[startArray + j + 1]].textureCoordinate.x;
-					wordPos1 = XMVectorSubtract(XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 0]].position)),XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 1]].position)));
-					textCoorU2 = vertexVec[indexVec[startArray + j + 0]].textureCoordinate.x - vertexVec[indexVec[startArray + j + 2]].textureCoordinate.x;
-					wordPos2 = XMVectorSubtract(XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 0]].position)),XMLoadFloat3(&(vertexVec[indexVec[startArray + j + 2]].position)));
+					textCoorU1 = modelData->vertexVec[modelData->indexVec[startArray + j + 0]].textureCoordinate.x - modelData->vertexVec[modelData->indexVec[startArray + j + 1]].textureCoordinate.x;
+					wordPos1 = XMVectorSubtract(XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[startArray + j + 0]].position)),XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[startArray + j + 1]].position)));
+					textCoorU2 = modelData->vertexVec[modelData->indexVec[startArray + j + 0]].textureCoordinate.x - modelData->vertexVec[modelData->indexVec[startArray + j + 2]].textureCoordinate.x;
+					wordPos2 = XMVectorSubtract(XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[startArray + j + 0]].position)),XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[startArray + j + 2]].position)));
 					tangentTemp = XMVector3Normalize(XMVectorAdd(XMVectorScale(wordPos1,textCoorU2),XMVectorScale(wordPos2,-textCoorU1)));
 
 					for(int k = 0;k < 3;k++)
 					{
-						if(!isCalcTangent[indexVec[startArray + j + k]])
+						if(!isCalcTangent[modelData->indexVec[startArray + j + k]])
 						{
-							XMStoreFloat3(&(vertexVec[indexVec[startArray + j + k]].tangent),tangentTemp);
-							isCalcTangent[indexVec[startArray + j + k]] = true;
+							XMStoreFloat3(&(modelData->vertexVec[modelData->indexVec[startArray + j + k]].tangent),tangentTemp);
+							isCalcTangent[modelData->indexVec[startArray + j + k]] = true;
 						}
-						else if(!XMVector3Equal(XMLoadFloat3(&(vertexVec[indexVec[startArray + j + k]].tangent)),tangentTemp))
+						else if(!XMVector3Equal(XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[startArray + j + k]].tangent)),tangentTemp))
 						{
-							vertexTemp.position = vertexVec[indexVec[startArray + j + k]].position;
-							vertexTemp.textureCoordinate = vertexVec[indexVec[startArray + j + k]].textureCoordinate;
-							vertexTemp.normal = vertexVec[indexVec[startArray + j + k]].normal;
+							vertexTemp.position = modelData->vertexVec[modelData->indexVec[startArray + j + k]].position;
+							vertexTemp.textureCoordinate = modelData->vertexVec[modelData->indexVec[startArray + j + k]].textureCoordinate;
+							vertexTemp.normal = modelData->vertexVec[modelData->indexVec[startArray + j + k]].normal;
 							XMStoreFloat3(&(vertexTemp.tangent),tangentTemp);
-							vertexVec.push_back(vertexTemp);
+							modelData->vertexVec.push_back(vertexTemp);
 							isCalcTangent.push_back(true);
-							indexVec[startArray + j + k] = vertexVec.size() + 1;
+							modelData->indexVec[startArray + j + k] = modelData->vertexVec.size() + 1;
 						}
 					}
 				}
@@ -1196,34 +1207,35 @@ bool LoadObjModel(std::wstring filename,ID3D11Buffer *&vertBuffer,ID3D11Buffer *
 		D3D11_BUFFER_DESC vertexBufferDesc;
 		D3D11_SUBRESOURCE_DATA vertexData;
 
-		vertexBufferDesc.ByteWidth = sizeof(Vertex) * vertexVec.size();
+		vertexBufferDesc.ByteWidth = sizeof(Vertex) * modelData->vertexVec.size();
 		vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
 		vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 		vertexBufferDesc.CPUAccessFlags = 0;
 		vertexBufferDesc.MiscFlags = 0;
 		vertexBufferDesc.StructureByteStride = 0;
-		vertexData.pSysMem = &(vertexVec[0]);
+		vertexData.pSysMem = &(modelData->vertexVec[0]);
 		vertexData.SysMemPitch = 0;
 		vertexData.SysMemSlicePitch = 0;
 
-		hr = d3dDevice->CreateBuffer(&vertexBufferDesc,&vertexData,&vertBuffer);
+		hr = d3dDevice->CreateBuffer(&vertexBufferDesc,&vertexData,&(modelData->modelVertexBuffer));
 		HR(hr);
 
 		D3D11_BUFFER_DESC indexBufferDesc;
 		D3D11_SUBRESOURCE_DATA indexData;
 
-		indexBufferDesc.ByteWidth = sizeof(DWORD) * indexVec.size();
+		indexBufferDesc.ByteWidth = sizeof(DWORD) * modelData->indexVec.size();
 		indexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
 		indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
 		indexBufferDesc.CPUAccessFlags = 0;
 		indexBufferDesc.MiscFlags = 0;
 		indexBufferDesc.StructureByteStride = 0;
-		indexData.pSysMem = &(indexVec[0]);
+		indexData.pSysMem = &(modelData->indexVec[0]);
 		indexData.SysMemPitch = 0;
 		indexData.SysMemSlicePitch = 0;
 
-		hr = d3dDevice->CreateBuffer(&indexBufferDesc,&indexData,&indexBuffer);
+		hr = d3dDevice->CreateBuffer(&indexBufferDesc,&indexData,&(modelData->modelIndexBuffer));
 		HR(hr);
+		modelData->isInit = true;
 
 		return true;
 	}
@@ -1612,8 +1624,9 @@ int CALLBACK WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine
 	WindowInit(hInstance);
 	DirectxInit();
 	
-	LoadObjModel(L"spaceCompound.obj",modelHouseVertexBuffer,modelHouseIndexBuffer,modelHouseSurMetVec,true);
-	LoadObjModel(L"ground.obj",modelGroundVertexBuffer,modelGroundIndexBuffer,modelGroundSurMetVec,true);
+	LoadObjModel(L"spaceCompound.obj",&modelHouse,true);
+	LoadObjModel(L"ground.obj",&modelGround,true);
+	LoadObjModel(L"bottle.obj",&modelBottle,true);
 	InitDirectInput(hInstance);
 	RenderPipeline();
 	messageLoop();
@@ -1720,8 +1733,9 @@ void DrawScene()
 	DrawSkyBox();
 	
 //画模型不透明部分
-	drawModelNonBlend(modelGroundVertexBuffer,modelGroundIndexBuffer,modelGroundSurMetVec,worldSpace,viewSpace,true);
-	drawModelNonBlend(modelHouseVertexBuffer,modelHouseIndexBuffer,modelHouseSurMetVec,worldSpace,viewSpace,false);
+	DrawModelNonBlend(&modelGround,worldSpace,viewSpace,true);
+	DrawModelNonBlend(&modelHouse,worldSpace,viewSpace,false);
+	DrawBottle(false);
 
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
@@ -1775,8 +1789,9 @@ void DrawScene()
 	d3dDeviceContext->DrawIndexed(36,0,0);
 
 //画模型透明部分
-	drawModelBlend(modelGroundVertexBuffer,modelGroundIndexBuffer,modelGroundSurMetVec,worldSpace,viewSpace,true);
-	drawModelBlend(modelHouseVertexBuffer,modelHouseIndexBuffer,modelHouseSurMetVec,worldSpace,viewSpace,false);
+	DrawModelBlend(&modelGround,worldSpace,viewSpace,true);
+	DrawModelBlend(&modelHouse,worldSpace,viewSpace,false);
+	DrawBottle(true);
 
 //显示文本
 	wchar_t timeTemp[120];
@@ -1786,15 +1801,18 @@ void DrawScene()
 	d3dSwapChain->Present(0,0);
 }
 
-void drawModelNonBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::vector<SurfaceMaterial> &surMetVec,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias)
+void DrawModelNonBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias)
 {
 	UINT indexStart = 0;
 	UINT indexCount = 0;
 	//no blend
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
-	d3dDeviceContext->IASetVertexBuffers(0,1,&vertBuffer,&stride,&offset);
-	d3dDeviceContext->IASetIndexBuffer(indexBuffer,DXGI_FORMAT_R32_UINT,0);
+
+	if(modelData->isInit == false)return;
+
+	d3dDeviceContext->IASetVertexBuffers(0,1,&(modelData->modelVertexBuffer),&stride,&offset);
+	d3dDeviceContext->IASetIndexBuffer(modelData->modelIndexBuffer,DXGI_FORMAT_R32_UINT,0);
 	d3dDeviceContext->VSSetShader(VS,0,0);
 	if(isBias)
 		d3dDeviceContext->RSSetState(rasterState_cwnc_bias);
@@ -1805,41 +1823,44 @@ void drawModelNonBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std:
 	d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
 	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * projectionMatrix);
 	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
-	for(int i = 0,len = surMetVec.size();i < len;i++)
+	for(int i = 0,len = modelData->modelSurMetVec.size();i < len;i++)
 	{
-		if(surMetVec[i].isTransparent == false)
+		if(modelData->modelSurMetVec[i].isTransparent == false)
 		{
-			indexStart = surMetVec[i].texArrayIndex;
-			indexCount = surMetVec[i].indexCount;
-			if(surMetVec[i].hasTexture == true)
+			indexStart = modelData->modelSurMetVec[i].texArrayIndex;
+			indexCount = modelData->modelSurMetVec[i].indexCount;
+			if(modelData->modelSurMetVec[i].hasTexture == true)
 			{
-				d3dDeviceContext->PSSetShaderResources(0,1,&(surMetVec[i].shaderResourceView));
+				d3dDeviceContext->PSSetShaderResources(0,1,&(modelData->modelSurMetVec[i].shaderResourceView));
 			}
 			else
 			{
-				constSpace.difColor = surMetVec[i].difColor;
+				constSpace.difColor = modelData->modelSurMetVec[i].difColor;
 			}
-			if(surMetVec[i].hasNormalMap)
+			if(modelData->modelSurMetVec[i].hasNormalMap)
 			{
-				d3dDeviceContext->PSSetShaderResources(1,1,&(surMetVec[i].normalMapResourceView));
+				d3dDeviceContext->PSSetShaderResources(1,1,&(modelData->modelSurMetVec[i].normalMapResourceView));
 			}
-			constSpace.hasTexture = surMetVec[i].hasTexture;
-			constSpace.hasNormalMap = surMetVec[i].hasNormalMap;
+			constSpace.hasTexture = modelData->modelSurMetVec[i].hasTexture;
+			constSpace.hasNormalMap = modelData->modelSurMetVec[i].hasNormalMap;
 			d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 			d3dDeviceContext->DrawIndexed(indexCount,indexStart,0);
 		}
 	}
 }
 
-void drawModelBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::vector<SurfaceMaterial> &surMetVec,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias)
+void DrawModelBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias)
 {
 	UINT indexStart = 0;
 	UINT indexCount = 0;
 	//no blend
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
-	d3dDeviceContext->IASetVertexBuffers(0,1,&vertBuffer,&stride,&offset);
-	d3dDeviceContext->IASetIndexBuffer(indexBuffer,DXGI_FORMAT_R32_UINT,0);
+
+	if(modelData->isInit == false)return;
+
+	d3dDeviceContext->IASetVertexBuffers(0,1,&(modelData->modelVertexBuffer),&stride,&offset);
+	d3dDeviceContext->IASetIndexBuffer(modelData->modelIndexBuffer,DXGI_FORMAT_R32_UINT,0);
 	d3dDeviceContext->VSSetShader(VS,0,0);
 	if(isBias)
 		d3dDeviceContext->RSSetState(rasterState_cwnc_bias);
@@ -1850,27 +1871,27 @@ void drawModelBlend(ID3D11Buffer*& vertBuffer,ID3D11Buffer*& indexBuffer,std::ve
 	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * projectionMatrix);
 	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
 	d3dDeviceContext->OMSetBlendState(blendState,0,0xffffffff);
-	for(int i = 0,len = surMetVec.size();i < len;i++)
+	for(int i = 0,len = modelData->modelSurMetVec.size();i < len;i++)
 	{
-		if(surMetVec[i].isTransparent == true)
+		if(modelData->modelSurMetVec[i].isTransparent == true)
 		{
-			indexStart = surMetVec[i].texArrayIndex;
-			indexCount = surMetVec[i].indexCount;
-			if(surMetVec[i].hasTexture == true)
+			indexStart = modelData->modelSurMetVec[i].texArrayIndex;
+			indexCount = modelData->modelSurMetVec[i].indexCount;
+			if(modelData->modelSurMetVec[i].hasTexture == true)
 			{
-				d3dDeviceContext->PSSetShaderResources(0,1,&(surMetVec[i].shaderResourceView));
+				d3dDeviceContext->PSSetShaderResources(0,1,&(modelData->modelSurMetVec[i].shaderResourceView));
 			}
 			else
 			{
-				constSpace.difColor = surMetVec[i].difColor;
+				constSpace.difColor = modelData->modelSurMetVec[i].difColor;
 				//constSpace.difColor = XMFLOAT4(0.5f,0.5f,0.5f,0.8f);
 			}
-			if(surMetVec[i].hasNormalMap)
+			if(modelData->modelSurMetVec[i].hasNormalMap)
 			{
-				d3dDeviceContext->PSSetShaderResources(1,1,&(surMetVec[i].normalMapResourceView));
+				d3dDeviceContext->PSSetShaderResources(1,1,&(modelData->modelSurMetVec[i].normalMapResourceView));
 			}
-			constSpace.hasTexture = surMetVec[i].hasTexture;
-			constSpace.hasNormalMap = surMetVec[i].hasNormalMap;
+			constSpace.hasTexture = modelData->modelSurMetVec[i].hasTexture;
+			constSpace.hasNormalMap = modelData->modelSurMetVec[i].hasNormalMap;
 			d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 			d3dDeviceContext->DrawIndexed(indexCount,indexStart,0);
 		}
@@ -1911,8 +1932,12 @@ void DetectInput(double time)
 			//cameraRotVertical = fmod(cameraRotVertical,6.2832f);
 	}
 
-	cameraDir.v = XMVector3TransformCoord(XMVectorSet(0.0f,0.0f,1.0f,1.0f),XMMatrixRotationY(cameraRotHorizontal));
+	if(mouseState.rgbButtons[0])
+		isMouseClicked = true;
+	else
+		isMouseClicked = false;
 
+	cameraDir.v = XMVector3TransformCoord(XMVectorSet(0.0f,0.0f,1.0f,1.0f),XMMatrixRotationY(cameraRotHorizontal));
 	cameraDir.v = XMVector3TransformCoord(cameraDir.v,XMMatrixRotationAxis(XMVectorSet(cameraDir.f[2],0.0f,-cameraDir.f[0],1.0f),cameraRotVertical));
 	cameraDir.v = XMVector3Normalize(cameraDir);
 	
@@ -1962,10 +1987,134 @@ void GetRayCast()
 	viewPoint.f[1] = ndcPoint.y / projectionMatrix(0,0);
 	viewPoint.f[2] = 1.0f;
 
-	/*change to world space and produce two point*/
+	/*change into world space and produce two point*/
 	XMMATRIX inverseViewSpace;
 	XMVECTOR vectorTemp;
 	inverseViewSpace = XMMatrixInverse(&vectorTemp,viewSpace);
-	rayPointEye.v = XMVector3Transform(XMVectorZero(),inverseViewSpace);
+	//rayPointEye.v = XMVector3Transform(XMVectorZero(),inverseViewSpace);
+	rayPointEye = eyePos;
 	rayPointDir.v = XMVector3Transform(viewPoint.v,inverseViewSpace);
+}
+bool MouseHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3)
+{
+	//1
+	{
+		XMVECTORF32 dir1_2,dir1_3;
+		XMVECTORF32 planeNormal;
+		XMVECTOR pointEyeToPlane;
+		float planeParaA,planeParaB,planeParaC,planeParaD;
+		float distanceEye,distanceDir;
+		float t;
+
+		dir1_2.v = XMVectorSet(point2.x-point1.x,point2.y-point1.y,point2.z-point1.z,1.0f);
+		dir1_3.v = XMVectorSet(point3.x-point1.x,point3.y-point1.y,point3.z-point1.z,1.0f);
+		planeNormal.v = XMVector3Cross(dir1_2,dir1_3);
+		planeParaA = planeNormal.f[0];
+		planeParaB = planeNormal.f[1];
+		planeParaC = planeNormal.f[2];
+		planeParaD = -(planeParaA * point1.x + planeParaB * point1.y + planeParaC * point1.z);
+		distanceEye = planeParaA * rayPointEye.f[0] + planeParaB * rayPointEye.f[1] + planeParaC * rayPointEye.f[2] + planeParaD; 
+		distanceDir = planeParaA * rayPointEye.f[0] + planeParaB * rayPointEye.f[1] + planeParaC * rayPointEye.f[2] + planeParaD;
+		t = (distanceEye - distanceDir)/distanceEye;
+		if(t < 0.0f)return false;
+		pointEyeToPlane = XMVectorAdd(rayPointEye.v,XMVectorScale(XMVectorSubtract(rayPointDir.v,rayPointEye.v),t));
+
+		XMVECTOR lineSeg1,lineSeg2,lineSeg3;
+		XMVECTOR crossVec1,crossVec2,crossVec3;
+		lineSeg1 = XMVectorSubtract(XMLoadFloat3(&point1),pointEyeToPlane);
+		lineSeg2 = XMVectorSubtract(XMLoadFloat3(&point2),pointEyeToPlane);
+		lineSeg3 = XMVectorSubtract(XMLoadFloat3(&point3),pointEyeToPlane);
+		crossVec1 = XMVector3Cross(lineSeg1,lineSeg2);
+		crossVec2 = XMVector3Cross(lineSeg2,lineSeg3);
+		if(XMVectorGetX(XMVector3Dot(crossVec1,crossVec2)) < 0.0f)return false;
+		crossVec3 = XMVector3Cross(lineSeg3,lineSeg1);
+		if(XMVectorGetX(XMVector3Dot(crossVec2,crossVec3)) < 0.0f)return false;
+		return true;
+	}
+
+	//2
+	{
+		//XMVECTOR pointDir1,pointDir2,pointDir3,rayDir;
+		//XMVECTOR dirNormal1,dirNormal2,dirNormal3;
+		//pointDir1 = XMVectorSubtract(XMLoadFloat3(&point1),rayPointEye.v);
+		//pointDir2 = XMVectorSubtract(XMLoadFloat3(&point2),rayPointEye.v);
+		//pointDir3 = XMVectorSubtract(XMLoadFloat3(&point3),rayPointEye.v);
+		//rayDir = XMVectorSubtract(rayPointDir.v,rayPointEye.v);
+	}
+	//未完
+
+	//3
+	{
+		XMVECTOR pointDir1,pointDir2,pointDir3,rayDir;
+		XMMATRIX pointCoordSystem;
+		XMVECTOR pointCoord;
+		pointDir1 = XMVectorSubtract(XMLoadFloat3(&point1),rayPointEye.v);
+		pointDir2 = XMVectorSubtract(XMLoadFloat3(&point2),rayPointEye.v);
+		pointDir3 = XMVectorSubtract(XMLoadFloat3(&point3),rayPointEye.v);
+		rayDir = XMVectorSubtract(rayPointDir.v,rayPointEye.v);
+		XMVECTOR vectorTemp;
+		pointCoordSystem = XMMatrixInverse(&vectorTemp,XMMATRIX(pointDir1,pointDir2,pointDir3,XMVectorZero()));
+		pointCoord = XMVector3Transform(XMVectorSubtract(rayPointDir.v,rayPointEye.v),pointCoordSystem);
+		if(XMVectorGetX(pointCoord) > 0 && XMVectorGetY(pointCoord) > 0 && XMVectorGetZ(pointCoord) > 0)
+			return true;
+		else
+			return false;
+	}
+}
+void DrawBottle(bool isBlend)
+{
+	static XMMATRIX worldSpaceTemp[20];
+	static bool isAlive[20];
+	static bool firstCall = true;
+	XMVECTORF32 point1,point2,point3;
+	if(firstCall == true)
+	{
+		for(int i = 0,len = 20;i < len;i++)
+		{
+			worldSpaceTemp[i] = XMMatrixTranslation(25.0f - 5.0f * i ,2.0f , 5.0f * i - 75.0f);
+			isAlive[i] = true;
+		}
+		firstCall = false;
+	}
+	
+	if(isMouseClicked)
+	{	
+		for(int i = 0,iLen = 20;i < iLen;i++)
+		{
+			for(int j = 0,jLen = modelBottle.indexVec.size();j < jLen;j+=3)
+			{
+				point1.v =  XMVector3Transform(XMLoadFloat3(&(modelBottle.vertexVec[modelBottle.indexVec[j]].position)),worldSpaceTemp[i]);
+				point2.v =  XMVector3Transform(XMLoadFloat3(&(modelBottle.vertexVec[modelBottle.indexVec[j+1]].position)),worldSpaceTemp[i]);
+				point3.v =  XMVector3Transform(XMLoadFloat3(&(modelBottle.vertexVec[modelBottle.indexVec[j+2]].position)),worldSpaceTemp[i]);
+				if(!MouseHitDetect(point1.f,point2.f,point3.f))
+				{
+					isAlive[i] = false;
+					break;
+				}
+			}
+		}
+	}
+
+	if(isBlend)
+	{
+		for(int i = 0,len = 20;i < len;i++)
+		{
+			if(isAlive[i] == true)
+			{
+				DrawModelBlend(&modelBottle,worldSpaceTemp[i],viewSpace,false);
+				//DrawModelBlend(&modelBottle,XMMatrixTranslation(0.0f,2.0f,2.0f),viewSpace,false);
+			}
+		}
+	}
+	else
+	{
+		for(int i = 0,len = 20;i < len;i++)
+		{
+			if(isAlive[i] == true)
+			{
+				DrawModelNonBlend(&modelBottle,worldSpaceTemp[i],viewSpace,false);
+				//DrawModelNonBlend(&modelBottle,XMMatrixTranslation(0.0f,2.0f,2.0f),viewSpace,false);
+			}
+		}
+	}
 }
