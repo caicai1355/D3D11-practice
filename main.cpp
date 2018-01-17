@@ -220,7 +220,7 @@ ID3D10Blob* VS_Buffer;
 ID3D10Blob* PS_Buffer;
 ID3D11VertexShader* VS;
 ID3D11PixelShader* PS;
-XMVECTORF32 eyePos = {-1.0f,1.0f,-1.0f,0.0f};
+XMVECTORF32 eyePos = {-1.0f,4.0f,-1.0f,0.0f};
 XMVECTORF32 focusPos = {0.0f,1.0f,0.0f,0.0f};
 XMVECTORF32 upPos = {0.0f,1.0f,0.0f,0.0f};
 FLOAT cameraRotHorizontal = 0.0f;
@@ -2004,7 +2004,7 @@ bool MouseHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3)
 		XMVECTOR pointEyeToPlane;
 		float planeParaA,planeParaB,planeParaC,planeParaD;
 		float distanceEye,distanceDir;
-		float t;
+		float t = 0.0f;
 
 		dir1_2.v = XMVectorSet(point2.x-point1.x,point2.y-point1.y,point2.z-point1.z,1.0f);
 		dir1_3.v = XMVectorSet(point3.x-point1.x,point3.y-point1.y,point3.z-point1.z,1.0f);
@@ -2014,8 +2014,8 @@ bool MouseHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3)
 		planeParaC = planeNormal.f[2];
 		planeParaD = -(planeParaA * point1.x + planeParaB * point1.y + planeParaC * point1.z);
 		distanceEye = planeParaA * rayPointEye.f[0] + planeParaB * rayPointEye.f[1] + planeParaC * rayPointEye.f[2] + planeParaD; 
-		distanceDir = planeParaA * rayPointEye.f[0] + planeParaB * rayPointEye.f[1] + planeParaC * rayPointEye.f[2] + planeParaD;
-		t = (distanceEye - distanceDir)/distanceEye;
+		distanceDir = planeParaA * rayPointDir.f[0] + planeParaB * rayPointDir.f[1] + planeParaC * rayPointDir.f[2] + planeParaD;
+		if(distanceEye - distanceDir != 0.0f)t = distanceEye/(distanceEye - distanceDir);
 		if(t < 0.0f)return false;
 		pointEyeToPlane = XMVectorAdd(rayPointEye.v,XMVectorScale(XMVectorSubtract(rayPointDir.v,rayPointEye.v),t));
 
@@ -2026,9 +2026,9 @@ bool MouseHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3)
 		lineSeg3 = XMVectorSubtract(XMLoadFloat3(&point3),pointEyeToPlane);
 		crossVec1 = XMVector3Cross(lineSeg1,lineSeg2);
 		crossVec2 = XMVector3Cross(lineSeg2,lineSeg3);
-		if(XMVectorGetX(XMVector3Dot(crossVec1,crossVec2)) < 0.0f)return false;
+		if(XMVectorGetX(XMVector3Dot(crossVec1,crossVec2)) <= 0.0f)return false;
 		crossVec3 = XMVector3Cross(lineSeg3,lineSeg1);
-		if(XMVectorGetX(XMVector3Dot(crossVec2,crossVec3)) < 0.0f)return false;
+		if(XMVectorGetX(XMVector3Dot(crossVec2,crossVec3)) <= 0.0f)return false;
 		return true;
 	}
 
@@ -2083,10 +2083,10 @@ void DrawBottle(bool isBlend)
 		{
 			for(int j = 0,jLen = modelBottle.indexVec.size();j < jLen;j+=3)
 			{
-				point1.v =  XMVector3Transform(XMLoadFloat3(&(modelBottle.vertexVec[modelBottle.indexVec[j]].position)),worldSpaceTemp[i]);
-				point2.v =  XMVector3Transform(XMLoadFloat3(&(modelBottle.vertexVec[modelBottle.indexVec[j+1]].position)),worldSpaceTemp[i]);
-				point3.v =  XMVector3Transform(XMLoadFloat3(&(modelBottle.vertexVec[modelBottle.indexVec[j+2]].position)),worldSpaceTemp[i]);
-				if(!MouseHitDetect(point1.f,point2.f,point3.f))
+				point1.v =  XMVector3TransformCoord(XMLoadFloat3(&(modelBottle.vertexVec[modelBottle.indexVec[j]].position)),worldSpaceTemp[i]);
+				point2.v =  XMVector3TransformCoord(XMLoadFloat3(&(modelBottle.vertexVec[modelBottle.indexVec[j+1]].position)),worldSpaceTemp[i]);
+				point3.v =  XMVector3TransformCoord(XMLoadFloat3(&(modelBottle.vertexVec[modelBottle.indexVec[j+2]].position)),worldSpaceTemp[i]);
+				if(MouseHitDetect(point1.f,point2.f,point3.f))
 				{
 					isAlive[i] = false;
 					break;
