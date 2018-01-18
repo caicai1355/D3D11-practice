@@ -36,20 +36,20 @@
 #include <comdef.h>
 #endif
 
-//#define WIDTH 100
-//#define HEIGHT 100 
-//#define POS_X 1200 
-//#define POS_Y 700
+#define WIDTH 100
+#define HEIGHT 100 
+#define POS_X 1200 
+#define POS_Y 700
 
 //#define WIDTH 500
 //#define HEIGHT 500 
 //#define POS_X 600 
 //#define POS_Y 200
 
-#define WIDTH 1800
-#define HEIGHT 1000 
-#define POS_X 10 
-#define POS_Y 10
+//#define WIDTH 1800
+//#define HEIGHT 1000 
+//#define POS_X 10 
+//#define POS_Y 10
 
 //#define LIGHT_TYPE_VERTEX_NORMAL
 #define LIGHT_TYPE_PLANE_NORMAL
