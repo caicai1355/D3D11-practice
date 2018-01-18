@@ -189,6 +189,9 @@ struct ModelData
 };
 
 HWND hwnd;
+int ClientWidth = 0;
+int ClientHeight = 0;
+
 IDXGISwapChain * d3dSwapChain;
 ID3D11Device * d3dDevice;
 ID3D11DeviceContext  * d3dDeviceContext;
@@ -446,6 +449,10 @@ LRESULT CALLBACK WinProc(HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam)
 	case WM_DESTROY:
 		PostQuitMessage(0);
 		return 0;
+	case WM_SIZE:
+        ClientWidth  = LOWORD(lParam);
+        ClientHeight = HIWORD(lParam);
+        return 0;
 	default:
 		return DefWindowProc(hwnd,message,wParam,lParam);
 	}
@@ -1344,7 +1351,7 @@ bool RenderPipeline()
 	rasterStateDesc.FrontCounterClockwise = false;
 	rasterStateDesc.CullMode = D3D11_CULL_NONE;
 	d3dDevice->CreateRasterizerState(&rasterStateDesc,&rasterState_cwnc);
-	rasterStateDesc.DepthBias = 200;	//50还不够。。。
+	rasterStateDesc.DepthBias = 300;	//200还偶尔会出现。。。
 	d3dDevice->CreateRasterizerState(&rasterStateDesc,&rasterState_cwnc_bias);
 	//d3dDeviceContext->RSSetState(rasterState_cw);
 
@@ -1905,7 +1912,7 @@ bool InitDirectInput(HINSTANCE hInstance)
 	HR_DEBUG(directInput->CreateDevice(GUID_SysMouse,&mouseDevice,NULL));
 	HR_DEBUG(directInput->CreateDevice(GUID_SysKeyboard,&keyboardDevice,NULL));
 	mouseDevice->SetDataFormat(&c_dfDIMouse);
-	mouseDevice->SetCooperativeLevel(hwnd,DISCL_EXCLUSIVE | DISCL_NOWINKEY | DISCL_FOREGROUND);
+	mouseDevice->SetCooperativeLevel(hwnd,DISCL_NONEXCLUSIVE | DISCL_NOWINKEY | DISCL_FOREGROUND);
 	keyboardDevice->SetDataFormat(&c_dfDIKeyboard);
 	keyboardDevice->SetCooperativeLevel(hwnd,DISCL_FOREGROUND | DISCL_NONEXCLUSIVE);
 	return true;
@@ -1981,10 +1988,10 @@ void GetRayCast()
 	/*change to view space*/
 	XMFLOAT2 ndcPoint;
 	XMVECTORF32 viewPoint;
-	ndcPoint.x = (mousePos.x * 2.0f / WIDTH - 1.0f);
-	ndcPoint.y = (mousePos.y * 2.0f / WIDTH - 1.0f);
+	ndcPoint.x = (mousePos.x * 2.0f / ClientWidth - 1.0f);
+	ndcPoint.y = (1.0f - mousePos.y * 2.0f / ClientHeight);
 	viewPoint.f[0] = ndcPoint.x / projectionMatrix(0,0);
-	viewPoint.f[1] = ndcPoint.y / projectionMatrix(0,0);
+	viewPoint.f[1] = ndcPoint.y / projectionMatrix(1,1);
 	viewPoint.f[2] = 1.0f;
 
 	/*change into world space and produce two point*/
@@ -2015,7 +2022,8 @@ bool MouseHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3)
 		planeParaD = -(planeParaA * point1.x + planeParaB * point1.y + planeParaC * point1.z);
 		distanceEye = planeParaA * rayPointEye.f[0] + planeParaB * rayPointEye.f[1] + planeParaC * rayPointEye.f[2] + planeParaD; 
 		distanceDir = planeParaA * rayPointDir.f[0] + planeParaB * rayPointDir.f[1] + planeParaC * rayPointDir.f[2] + planeParaD;
-		if(distanceEye - distanceDir != 0.0f)t = distanceEye/(distanceEye - distanceDir);
+		if(distanceEye == distanceDir)return false;
+		t = distanceEye/(distanceEye - distanceDir);
 		if(t < 0.0f)return false;
 		pointEyeToPlane = XMVectorAdd(rayPointEye.v,XMVectorScale(XMVectorSubtract(rayPointDir.v,rayPointEye.v),t));
 
@@ -2061,25 +2069,28 @@ bool MouseHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3)
 			return false;
 	}
 }
+
+#define BOTTLE_NUM 20
 void DrawBottle(bool isBlend)
 {
-	static XMMATRIX worldSpaceTemp[20];
-	static bool isAlive[20];
+	static XMMATRIX worldSpaceTemp[BOTTLE_NUM];
+	static bool isAlive[BOTTLE_NUM];
 	static bool firstCall = true;
 	XMVECTORF32 point1,point2,point3;
 	if(firstCall == true)
 	{
-		for(int i = 0,len = 20;i < len;i++)
+		for(int i = 0,len = BOTTLE_NUM;i < len;i++)
 		{
 			worldSpaceTemp[i] = XMMatrixTranslation(25.0f - 5.0f * i ,2.0f , 5.0f * i - 75.0f);
 			isAlive[i] = true;
 		}
+		worldSpaceTemp[0] = XMMatrixTranslation(-2.0f,2.0f,0.0f);
 		firstCall = false;
 	}
 	
 	if(isMouseClicked)
 	{	
-		for(int i = 0,iLen = 20;i < iLen;i++)
+		for(int i = 0,iLen = BOTTLE_NUM;i < iLen;i++)
 		{
 			for(int j = 0,jLen = modelBottle.indexVec.size();j < jLen;j+=3)
 			{
