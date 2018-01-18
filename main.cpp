@@ -36,15 +36,20 @@
 #include <comdef.h>
 #endif
 
-#define WIDTH 100
-#define HEIGHT 100 
-#define POS_X 1200 
-#define POS_Y 700
+//#define WIDTH 100
+//#define HEIGHT 100 
+//#define POS_X 1200 
+//#define POS_Y 700
 
 //#define WIDTH 500
 //#define HEIGHT 500 
 //#define POS_X 600 
 //#define POS_Y 200
+
+#define WIDTH 1800
+#define HEIGHT 1000 
+#define POS_X 10 
+#define POS_Y 10
 
 //#define LIGHT_TYPE_VERTEX_NORMAL
 #define LIGHT_TYPE_PLANE_NORMAL
@@ -250,6 +255,7 @@ LPDIRECTINPUT8 directInput;
 IDirectInputDevice8 * mouseDevice;
 IDirectInputDevice8 * keyboardDevice;
 bool isMouseClicked = false;
+bool isMousePressed  = false;
 
 //skyBox
 ID3D10Blob* SkyBox_VS_Buffer;
@@ -435,6 +441,7 @@ void DrawBottle(bool isBlend);
 
 void UpdateScene(double currentFrameTime);
 void GetRayCast();
+bool MouseHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3);
 void DrawScene();
 
 LRESULT CALLBACK WinProc(HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam)
@@ -571,7 +578,9 @@ void DirectxInit()
 	//DXGIFactory->EnumAdapters1(4, &Adapter);
 	DXGIFactory->Release();	
 
-	hr = D3D11CreateDeviceAndSwapChain(Adapter,D3D_DRIVER_TYPE_UNKNOWN,NULL,D3D11_CREATE_DEVICE_DEBUG|D3D11_CREATE_DEVICE_BGRA_SUPPORT,NULL,NULL,D3D11_SDK_VERSION,&d3dSwapChainDesc,&d3dSwapChain,&d3dDevice,NULL,&d3dDeviceContext);	//后面试一下把adapter换回NULL会怎么样
+	
+	hr = D3D11CreateDeviceAndSwapChain(Adapter,D3D_DRIVER_TYPE_UNKNOWN,NULL,D3D11_CREATE_DEVICE_BGRA_SUPPORT,NULL,NULL,D3D11_SDK_VERSION,&d3dSwapChainDesc,&d3dSwapChain,&d3dDevice,NULL,&d3dDeviceContext);	//后面试一下把adapter换回NULL会怎么样
+	//hr = D3D11CreateDeviceAndSwapChain(Adapter,D3D_DRIVER_TYPE_UNKNOWN,NULL,D3D11_CREATE_DEVICE_DEBUG|D3D11_CREATE_DEVICE_BGRA_SUPPORT,NULL,NULL,D3D11_SDK_VERSION,&d3dSwapChainDesc,&d3dSwapChain,&d3dDevice,NULL,&d3dDeviceContext);	//debug会减慢速度，难怪帧率一直这么低。。
 	//hr = D3D11CreateDeviceAndSwapChain(Adapter,D3D_DRIVER_TYPE_UNKNOWN,NULL,D3D11_CREATE_DEVICE_BGRA_SUPPORT,NULL,NULL,D3D11_SDK_VERSION,&d3dSwapChainDesc,&d3dSwapChain,&d3dDevice,NULL,&d3dDeviceContext);	//后面试一下把adapter换回NULL会怎么样
 	HR_DEBUG(hr);
 	//HR(D3D11CreateDeviceAndSwapChain(NULL,D3D_DRIVER_TYPE_HARDWARE,NULL,NULL,NULL,NULL,D3D11_SDK_VERSION,&d3dSwapChainDesc,&d3dSwapChain,&d3dDevice,NULL,&d3dDeviceContext));
@@ -1741,7 +1750,7 @@ void DrawScene()
 	
 //画模型不透明部分
 	DrawModelNonBlend(&modelGround,worldSpace,viewSpace,true);
-	DrawModelNonBlend(&modelHouse,worldSpace,viewSpace,false);
+	//DrawModelNonBlend(&modelHouse,worldSpace,viewSpace,false);
 	DrawBottle(false);
 
 	UINT stride = sizeof(Vertex);
@@ -1763,7 +1772,7 @@ void DrawScene()
 	constSpace.hasNormalMap = false;
 	constSpace.difColor = XMFLOAT4(1.0f,1.0f,1.0f,1.0f);
 	d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
-	d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_grass);
+	//d3dDeviceContext->PSSetShaderResources(0,1,&shaderResourceView_grass);
 	//d3dDeviceContext->DrawIndexed(6,36,0);
 
 //画两个立方体
@@ -1797,8 +1806,8 @@ void DrawScene()
 
 //画模型透明部分
 	DrawModelBlend(&modelGround,worldSpace,viewSpace,true);
-	DrawModelBlend(&modelHouse,worldSpace,viewSpace,false);
-	DrawBottle(true);
+	//DrawModelBlend(&modelHouse,worldSpace,viewSpace,false);
+	//DrawBottle(true);
 
 //显示文本
 	wchar_t timeTemp[120];
@@ -1809,6 +1818,54 @@ void DrawScene()
 }
 
 void DrawModelNonBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias)
+{
+	UINT indexStart = 0;
+	UINT indexCount = 0;
+	//no blend
+	UINT stride = sizeof(Vertex);
+	UINT offset = 0;
+
+	if(modelData->isInit == false)return;
+
+	d3dDeviceContext->IASetVertexBuffers(0,1,&(modelData->modelVertexBuffer),&stride,&offset);
+	d3dDeviceContext->IASetIndexBuffer(modelData->modelIndexBuffer,DXGI_FORMAT_R32_UINT,0);
+	d3dDeviceContext->VSSetShader(VS,0,0);
+	if(isBias)
+		d3dDeviceContext->RSSetState(rasterState_cwnc_bias);
+	else
+		d3dDeviceContext->RSSetState(rasterState_cwnc);
+	d3dDeviceContext->PSSetShader(PS,0,0);
+	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
+	d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
+	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * projectionMatrix);
+	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
+	for(int i = 0,len = modelData->modelSurMetVec.size();i < len;i++)
+	{
+		if(modelData->modelSurMetVec[i].isTransparent == false)
+		{
+			indexStart = modelData->modelSurMetVec[i].texArrayIndex;
+			indexCount = modelData->modelSurMetVec[i].indexCount;
+			if(modelData->modelSurMetVec[i].hasTexture == true)
+			{
+				d3dDeviceContext->PSSetShaderResources(0,1,&(modelData->modelSurMetVec[i].shaderResourceView));
+			}
+			else
+			{
+				constSpace.difColor = modelData->modelSurMetVec[i].difColor;
+			}
+			if(modelData->modelSurMetVec[i].hasNormalMap)
+			{
+				d3dDeviceContext->PSSetShaderResources(1,1,&(modelData->modelSurMetVec[i].normalMapResourceView));
+			}
+			constSpace.hasTexture = modelData->modelSurMetVec[i].hasTexture;
+			constSpace.hasNormalMap = modelData->modelSurMetVec[i].hasNormalMap;
+			d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
+			d3dDeviceContext->DrawIndexed(indexCount,indexStart,0);
+		}
+	}
+}
+
+void DrawModelNonBlendBottle(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias)
 {
 	UINT indexStart = 0;
 	UINT indexCount = 0;
@@ -1939,10 +1996,19 @@ void DetectInput(double time)
 			//cameraRotVertical = fmod(cameraRotVertical,6.2832f);
 	}
 
+	isMouseClicked = false;
 	if(mouseState.rgbButtons[0])
-		isMouseClicked = true;
+	{
+		if(isMousePressed == false)
+		{
+			isMouseClicked = true;
+		}
+		isMousePressed = true;
+	}
 	else
-		isMouseClicked = false;
+	{
+		isMousePressed = false;
+	}
 
 	cameraDir.v = XMVector3TransformCoord(XMVectorSet(0.0f,0.0f,1.0f,1.0f),XMMatrixRotationY(cameraRotHorizontal));
 	cameraDir.v = XMVector3TransformCoord(cameraDir.v,XMMatrixRotationAxis(XMVectorSet(cameraDir.f[2],0.0f,-cameraDir.f[0],1.0f),cameraRotVertical));
@@ -2081,7 +2147,7 @@ void DrawBottle(bool isBlend)
 	{
 		for(int i = 0,len = BOTTLE_NUM;i < len;i++)
 		{
-			worldSpaceTemp[i] = XMMatrixTranslation(25.0f - 5.0f * i ,2.0f , 5.0f * i - 75.0f);
+			worldSpaceTemp[i] = XMMatrixTranslation(25.0f - 5.0f * (i%10 + i/10) ,2.0f , 5.0f * (i%10 - 1/10) - 75.0f);
 			isAlive[i] = true;
 		}
 		worldSpaceTemp[0] = XMMatrixTranslation(-2.0f,2.0f,0.0f);
@@ -2108,23 +2174,22 @@ void DrawBottle(bool isBlend)
 
 	if(isBlend)
 	{
-		for(int i = 0,len = 20;i < len;i++)
+		for(int i = 0,len = BOTTLE_NUM;i < len;i++)
 		{
 			if(isAlive[i] == true)
 			{
 				DrawModelBlend(&modelBottle,worldSpaceTemp[i],viewSpace,false);
-				//DrawModelBlend(&modelBottle,XMMatrixTranslation(0.0f,2.0f,2.0f),viewSpace,false);
 			}
 		}
 	}
 	else
 	{
-		for(int i = 0,len = 20;i < len;i++)
+		for(int i = 0,len = BOTTLE_NUM;i < len;i++)
 		{
 			if(isAlive[i] == true)
 			{
-				DrawModelNonBlend(&modelBottle,worldSpaceTemp[i],viewSpace,false);
-				//DrawModelNonBlend(&modelBottle,XMMatrixTranslation(0.0f,2.0f,2.0f),viewSpace,false);
+				//DrawModelNonBlend(&modelBottle,worldSpaceTemp[i],viewSpace,false);
+				DrawModelNonBlendBottle(&modelBottle,worldSpaceTemp[i],viewSpace,false);
 			}
 		}
 	}
