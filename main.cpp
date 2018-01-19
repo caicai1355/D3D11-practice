@@ -228,9 +228,9 @@ ID3D10Blob* VS_Buffer;
 ID3D10Blob* PS_Buffer;
 ID3D11VertexShader* VS;
 ID3D11PixelShader* PS;
-XMVECTORF32 eyePos = {-1.0f,4.0f,-1.0f,0.0f};
-XMVECTORF32 focusPos = {0.0f,1.0f,0.0f,0.0f};
-XMVECTORF32 upPos = {0.0f,1.0f,0.0f,0.0f};
+XMVECTORF32 eyePos = {-1.0f,4.0f,-1.0f,1.0f};
+XMVECTORF32 focusPos = {0.0f,1.0f,0.0f,1.0f};
+XMVECTORF32 upPos = {0.0f,1.0f,0.0f,1.0f};
 FLOAT cameraRotHorizontal = 0.0f;
 FLOAT cameraRotVertical = 0.0f;
 XMVECTORF32 cameraDir;
@@ -433,7 +433,7 @@ void DetectInput(double time);
 
 void SkyBoxInit();
 
-bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoord);
+bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoord,bool isCalcNormal);
 void DrawModelNonBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);
 void DrawModelBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);
 
@@ -686,7 +686,7 @@ void D2D_init(IDXGIAdapter1 *Adapter)
 	d3dDevice->CreateShaderResourceView(myTestTexture,NULL,&shaderResourceView_text);
 }
 
-bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoord)
+bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoord,bool isCalcNormal)
 {
 	std::vector<VertexMsgObjIndex> vertMsgVec;	//obj文件里 f 字段的组合结构体以不重复的形式保存的vertex信息序列
 	std::vector<XMFLOAT3> posVec;	//obj文件对应排列下来的vertex信息
@@ -882,21 +882,45 @@ bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoo
 						}
 					}
 					flagTemp = false;
-					for(DWORD i = 0,lenTemp = vertMsgVec.size();i < lenTemp;i++)	//判断是否已经有了一样的vertex，有的话就直接将对应index赋值过去
+					if(!isCalcNormal)
 					{
-						if(vertMsgVec[i].verIdx == verTemp && vertMsgVec[i].texCoorIdx == texCoorTemp && vertMsgVec[i].normalIdx == normalTemp)
+						for(DWORD i = 0,lenTemp = vertMsgVec.size();i < lenTemp;i++)	//判断是否已经有了一样的vertex，有的话就直接将对应index赋值过去
 						{
-							flagTemp = true;
-							modelData->indexVec.push_back(i);
+							if(vertMsgVec[i].verIdx == verTemp && vertMsgVec[i].texCoorIdx == texCoorTemp && vertMsgVec[i].normalIdx == normalTemp)
+							{
+								flagTemp = true;
+								modelData->indexVec.push_back(i);
+								break;
+							}
+						}
+						if(flagTemp == false)	//没有的话就创建一个VertexMsgObjIndex结构体并添加新数据，然后将对应index赋值过去
+						{
+							verMsgObjTemp.verIdx = verTemp;
+							verMsgObjTemp.texCoorIdx = texCoorTemp;
+							verMsgObjTemp.normalIdx = normalTemp;
+							vertMsgVec.push_back(verMsgObjTemp);
+							modelData->indexVec.push_back(vertMsgVec.size()-1);
 						}
 					}
-					if(flagTemp == false)	//没有的话就创建一个VertexMsgObjIndex结构体并添加新数据，然后将对应index赋值过去
+					else
 					{
-						verMsgObjTemp.verIdx = verTemp;
-						verMsgObjTemp.texCoorIdx = texCoorTemp;
-						verMsgObjTemp.normalIdx = normalTemp;
-						vertMsgVec.push_back(verMsgObjTemp);
-						modelData->indexVec.push_back(vertMsgVec.size()-1);
+						for(DWORD i = 0,lenTemp = vertMsgVec.size();i < lenTemp;i++)
+						{
+							if(vertMsgVec[i].verIdx == verTemp && vertMsgVec[i].texCoorIdx == texCoorTemp)
+							{
+								flagTemp = true;
+								modelData->indexVec.push_back(i);
+								break;
+							}
+						}
+						if(flagTemp == false)
+						{
+							verMsgObjTemp.verIdx = verTemp;
+							verMsgObjTemp.texCoorIdx = texCoorTemp;
+							verMsgObjTemp.normalIdx = 0;
+							vertMsgVec.push_back(verMsgObjTemp);
+							modelData->indexVec.push_back(vertMsgVec.size()-1);
+						}
 					}
 					indexIndex++;
 				}
@@ -1147,8 +1171,49 @@ bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoo
 			}
 			modelData->vertexVec.push_back(vertexTemp);
 		}
+		
+		//calculate the normal(smooth surface)
+		if(isCalcNormal)
+		{
+			std::vector<XMFLOAT3> faceNormal;
+			XMFLOAT3 normalTemp;
+			for(int i = 0,iLen = modelData->indexVec.size();i < iLen;i+=3)
+			{
+				normalTemp.x = (modelData->vertexVec[modelData->indexVec[i]].normal.x + modelData->vertexVec[modelData->indexVec[i+1]].normal.x + modelData->vertexVec[modelData->indexVec[i+2]].normal.x)/3;
+				normalTemp.y = (modelData->vertexVec[modelData->indexVec[i]].normal.y + modelData->vertexVec[modelData->indexVec[i+1]].normal.y + modelData->vertexVec[modelData->indexVec[i+2]].normal.y)/3;
+				normalTemp.z = (modelData->vertexVec[modelData->indexVec[i]].normal.z + modelData->vertexVec[modelData->indexVec[i+1]].normal.z + modelData->vertexVec[modelData->indexVec[i+2]].normal.z)/3;
+				faceNormal.push_back(normalTemp);
+			}
+			int joinFaceNum;
+			for(int i = 0,iLen = modelData->vertexVec.size();i < iLen;i++)
+			{
+				joinFaceNum = 0;
+				normalTemp = XMFLOAT3(0.0f,0.0f,0.0f);
+				for(int j = 0,k = 0,jLen = faceNormal.size();j < jLen;j++)
+				{
+					if(modelData->indexVec[j*3] == i || modelData->indexVec[j*3+1] == i || modelData->indexVec[j*3+2] == i)
+					{
+						joinFaceNum++;
+						normalTemp.x += faceNormal[j].x;
+						normalTemp.y += faceNormal[j].y;
+						normalTemp.z += faceNormal[j].z;
+					}
+				}
+				if(joinFaceNum > 0)
+				{
+					normalTemp.x /= joinFaceNum;
+					normalTemp.y /= joinFaceNum;
+					normalTemp.z /= joinFaceNum;
+					modelData->vertexVec[i].normal = normalTemp;
+				}
+				else
+				{
+					modelData->vertexVec[i].normal = modelData->vertexVec[i].position;
+				}
+			}
+		}
 
-		/*计算tangent，如果和原vertex已经算过了tangent，且和当前算好的不一样，则需要创建新的vertex，添加到队列的最后并修改对应的index*/
+		/*计算tangent，如果原vertex已经算过了tangent，且和当前算好的不一样，则需要创建新的vertex，添加到队列的最后并修改对应的index*/
 		std::vector<bool> isCalcTangent;
 		float textCoorU1,textCoorU2;
 		XMVECTOR wordPos1,wordPos2;
@@ -1216,8 +1281,6 @@ bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoo
 				}
 			}
 		}
-
-		/*可以补充法向量的自动获取*/
 
 		HRESULT hr;
 		D3D11_BUFFER_DESC vertexBufferDesc;
@@ -1640,9 +1703,9 @@ int CALLBACK WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine
 	WindowInit(hInstance);
 	DirectxInit();
 	
-	LoadObjModel(L"spaceCompound.obj",&modelHouse,true);
-	LoadObjModel(L"ground.obj",&modelGround,true);
-	LoadObjModel(L"bottle.obj",&modelBottle,true);
+	LoadObjModel(L"spaceCompound.obj",&modelHouse,true,false);
+	LoadObjModel(L"ground.obj",&modelGround,true,false);
+	LoadObjModel(L"bottle.obj",&modelBottle,true,true);
 	InitDirectInput(hInstance);
 	RenderPipeline();
 	messageLoop();
@@ -1750,7 +1813,7 @@ void DrawScene()
 	
 //画模型不透明部分
 	DrawModelNonBlend(&modelGround,worldSpace,viewSpace,true);
-	//DrawModelNonBlend(&modelHouse,worldSpace,viewSpace,false);
+	DrawModelNonBlend(&modelHouse,worldSpace,viewSpace,false);
 	DrawBottle(false);
 
 	UINT stride = sizeof(Vertex);
@@ -1806,7 +1869,7 @@ void DrawScene()
 
 //画模型透明部分
 	DrawModelBlend(&modelGround,worldSpace,viewSpace,true);
-	//DrawModelBlend(&modelHouse,worldSpace,viewSpace,false);
+	DrawModelBlend(&modelHouse,worldSpace,viewSpace,false);
 	//DrawBottle(true);
 
 //显示文本
@@ -2010,8 +2073,8 @@ void DetectInput(double time)
 		isMousePressed = false;
 	}
 
-	cameraDir.v = XMVector3TransformCoord(XMVectorSet(0.0f,0.0f,1.0f,1.0f),XMMatrixRotationY(cameraRotHorizontal));
-	cameraDir.v = XMVector3TransformCoord(cameraDir.v,XMMatrixRotationAxis(XMVectorSet(cameraDir.f[2],0.0f,-cameraDir.f[0],1.0f),cameraRotVertical));
+	cameraDir.v = XMVector3TransformNormal(XMVectorSet(0.0f,0.0f,1.0f,1.0f),XMMatrixRotationY(cameraRotHorizontal));
+	cameraDir.v = XMVector3TransformNormal(cameraDir.v,XMMatrixRotationAxis(XMVectorSet(cameraDir.f[2],0.0f,-cameraDir.f[0],1.0f),cameraRotVertical));
 	cameraDir.v = XMVector3Normalize(cameraDir);
 	
 	float speed = 5 * float(time);
@@ -2019,25 +2082,25 @@ void DetectInput(double time)
 	{
 		XMVECTORF32 dirNormalized = {cameraDir.f[0],0.0f,cameraDir.f[2]};
 		dirNormalized.v = XMVector3Normalize(dirNormalized.v);
-		eyePos.v = XMVector3Transform(eyePos,XMMatrixTranslation(dirNormalized.f[0] * speed,0.0f,dirNormalized.f[2] * speed));
+		eyePos.v = XMVector3TransformCoord(eyePos,XMMatrixTranslation(dirNormalized.f[0] * speed,0.0f,dirNormalized.f[2] * speed));
 	}
 	if(keyboardState[DIK_S] & 0x80)
 	{
 		XMVECTORF32 dirNormalized = {cameraDir.f[0],0.0f,cameraDir.f[2]};
 		dirNormalized.v = XMVector3Normalize(dirNormalized.v);
-		eyePos.v = XMVector3Transform(eyePos,XMMatrixTranslation(-dirNormalized.f[0] * speed,0,-dirNormalized.f[2] * speed));
+		eyePos.v = XMVector3TransformCoord(eyePos,XMMatrixTranslation(-dirNormalized.f[0] * speed,0,-dirNormalized.f[2] * speed));
 	}
 	if(keyboardState[DIK_A] & 0x80)
 	{
 		XMVECTORF32 dirNormalized = {cameraDir.f[0],0.0f,cameraDir.f[2]};
 		dirNormalized.v = XMVector3Normalize(dirNormalized.v);
-		eyePos.v = XMVector3Transform(eyePos,XMMatrixTranslation(-dirNormalized.f[2] * speed,0,dirNormalized.f[0] * speed));
+		eyePos.v = XMVector3TransformCoord(eyePos,XMMatrixTranslation(-dirNormalized.f[2] * speed,0,dirNormalized.f[0] * speed));
 	}
 	if(keyboardState[DIK_D] & 0x80)
 	{
 		XMVECTORF32 dirNormalized = {cameraDir.f[0],0.0f,cameraDir.f[2]};
 		dirNormalized.v = XMVector3Normalize(dirNormalized.v);
-		eyePos.v = XMVector3Transform(eyePos,XMMatrixTranslation(dirNormalized.f[2] * speed,0,-dirNormalized.f[0] * speed));
+		eyePos.v = XMVector3TransformCoord(eyePos,XMMatrixTranslation(dirNormalized.f[2] * speed,0,-dirNormalized.f[0] * speed));
 	}
 	focusPos.v = eyePos.v + cameraDir.v;
 	viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
@@ -2059,51 +2122,57 @@ void GetRayCast()
 	viewPoint.f[0] = ndcPoint.x / projectionMatrix(0,0);
 	viewPoint.f[1] = ndcPoint.y / projectionMatrix(1,1);
 	viewPoint.f[2] = 1.0f;
+	viewPoint.f[3] = 1.0f;
 
 	/*change into world space and produce two point*/
 	XMMATRIX inverseViewSpace;
 	XMVECTOR vectorTemp;
 	inverseViewSpace = XMMatrixInverse(&vectorTemp,viewSpace);
-	//rayPointEye.v = XMVector3Transform(XMVectorZero(),inverseViewSpace);
+	//rayPointEye.v = XMVector3TransformCoord(XMVectorZero(),inverseViewSpace);
 	rayPointEye = eyePos;
-	rayPointDir.v = XMVector3Transform(viewPoint.v,inverseViewSpace);
+	rayPointDir.v = XMVector3TransformCoord(viewPoint.v,inverseViewSpace);
 }
 bool MouseHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3)
 {
 	//1
 	{
-		XMVECTORF32 dir1_2,dir1_3;
-		XMVECTORF32 planeNormal;
-		XMVECTOR pointEyeToPlane;
-		float planeParaA,planeParaB,planeParaC,planeParaD;
-		float distanceEye,distanceDir;
-		float t = 0.0f;
+		//XMVECTOR point1Vec,point2Vec,point3Vec;
+		//XMVECTORF32 dir1_2,dir1_3;
+		//XMVECTORF32 planeNormal;
+		//XMVECTOR pointEyeToPlane;
+		//float planeParaA,planeParaB,planeParaC,planeParaD;
+		//float distanceEye,distanceDir;
+		//float t = 0.0f;
 
-		dir1_2.v = XMVectorSet(point2.x-point1.x,point2.y-point1.y,point2.z-point1.z,1.0f);
-		dir1_3.v = XMVectorSet(point3.x-point1.x,point3.y-point1.y,point3.z-point1.z,1.0f);
-		planeNormal.v = XMVector3Cross(dir1_2,dir1_3);
-		planeParaA = planeNormal.f[0];
-		planeParaB = planeNormal.f[1];
-		planeParaC = planeNormal.f[2];
-		planeParaD = -(planeParaA * point1.x + planeParaB * point1.y + planeParaC * point1.z);
-		distanceEye = planeParaA * rayPointEye.f[0] + planeParaB * rayPointEye.f[1] + planeParaC * rayPointEye.f[2] + planeParaD; 
-		distanceDir = planeParaA * rayPointDir.f[0] + planeParaB * rayPointDir.f[1] + planeParaC * rayPointDir.f[2] + planeParaD;
-		if(distanceEye == distanceDir)return false;
-		t = distanceEye/(distanceEye - distanceDir);
-		if(t < 0.0f)return false;
-		pointEyeToPlane = XMVectorAdd(rayPointEye.v,XMVectorScale(XMVectorSubtract(rayPointDir.v,rayPointEye.v),t));
+		//point1Vec =  XMVectorSetW(XMLoadFloat3(&point1),1.0f);
+		//point2Vec =  XMVectorSetW(XMLoadFloat3(&point2),1.0f);
+		//point3Vec =  XMVectorSetW(XMLoadFloat3(&point3),1.0f);
 
-		XMVECTOR lineSeg1,lineSeg2,lineSeg3;
-		XMVECTOR crossVec1,crossVec2,crossVec3;
-		lineSeg1 = XMVectorSubtract(XMLoadFloat3(&point1),pointEyeToPlane);
-		lineSeg2 = XMVectorSubtract(XMLoadFloat3(&point2),pointEyeToPlane);
-		lineSeg3 = XMVectorSubtract(XMLoadFloat3(&point3),pointEyeToPlane);
-		crossVec1 = XMVector3Cross(lineSeg1,lineSeg2);
-		crossVec2 = XMVector3Cross(lineSeg2,lineSeg3);
-		if(XMVectorGetX(XMVector3Dot(crossVec1,crossVec2)) <= 0.0f)return false;
-		crossVec3 = XMVector3Cross(lineSeg3,lineSeg1);
-		if(XMVectorGetX(XMVector3Dot(crossVec2,crossVec3)) <= 0.0f)return false;
-		return true;
+		//dir1_2.v = XMVectorSet(point2.x-point1.x,point2.y-point1.y,point2.z-point1.z,0.0f);
+		//dir1_3.v = XMVectorSet(point3.x-point1.x,point3.y-point1.y,point3.z-point1.z,0.0f);
+		//planeNormal.v = XMVector3Cross(dir1_2,dir1_3);
+		//planeParaA = planeNormal.f[0];
+		//planeParaB = planeNormal.f[1];
+		//planeParaC = planeNormal.f[2];
+		//planeParaD = -(planeParaA * point1.x + planeParaB * point1.y + planeParaC * point1.z);
+		//distanceEye = planeParaA * rayPointEye.f[0] + planeParaB * rayPointEye.f[1] + planeParaC * rayPointEye.f[2] + planeParaD; 
+		//distanceDir = planeParaA * rayPointDir.f[0] + planeParaB * rayPointDir.f[1] + planeParaC * rayPointDir.f[2] + planeParaD;
+		//if(distanceEye == distanceDir)return false;
+		//t = distanceEye/(distanceEye - distanceDir);
+		//if(t < 0.0f)return false;
+		//pointEyeToPlane = rayPointEye.v + XMVectorScale(XMVectorSubtract(rayPointDir.v,rayPointEye.v),t);
+
+		//XMVECTOR lineSeg1,lineSeg2,lineSeg3;
+		//XMVECTOR crossVec1,crossVec2,crossVec3;
+		//lineSeg1 = point1Vec - pointEyeToPlane;
+		//lineSeg2 = point2Vec - pointEyeToPlane;
+		//lineSeg3 = point3Vec - pointEyeToPlane;
+		//crossVec1 = XMVector3Cross(lineSeg1,lineSeg2);
+		//crossVec2 = XMVector3Cross(lineSeg2,lineSeg3);
+		//if(XMVectorGetX(XMVector3Dot(crossVec1,crossVec2)) <= 0.0f)return false;
+		//crossVec3 = XMVector3Cross(lineSeg3,lineSeg1);
+		//if(XMVectorGetX(XMVector3Dot(crossVec2,crossVec3)) <= 0.0f)return false;
+		//return true;
 	}
 
 	//2
@@ -2119,17 +2188,29 @@ bool MouseHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3)
 
 	//3
 	{
+		XMVECTOR point1Vec,point2Vec,point3Vec;
 		XMVECTOR pointDir1,pointDir2,pointDir3,rayDir;
 		XMMATRIX pointCoordSystem;
+		XMMATRIX triangleCoordSystem;
 		XMVECTOR pointCoord;
-		pointDir1 = XMVectorSubtract(XMLoadFloat3(&point1),rayPointEye.v);
-		pointDir2 = XMVectorSubtract(XMLoadFloat3(&point2),rayPointEye.v);
-		pointDir3 = XMVectorSubtract(XMLoadFloat3(&point3),rayPointEye.v);
-		rayDir = XMVectorSubtract(rayPointDir.v,rayPointEye.v);
+
+		point1Vec =  XMVectorSetW(XMLoadFloat3(&point1),1.0f);
+		point2Vec =  XMVectorSetW(XMLoadFloat3(&point2),1.0f);
+		point3Vec =  XMVectorSetW(XMLoadFloat3(&point3),1.0f);
+
+		pointDir1 = point1Vec - rayPointEye.v;
+		pointDir2 = point2Vec - rayPointEye.v;
+		pointDir3 = point3Vec - rayPointEye.v;
+		rayDir = rayPointDir.v - rayPointEye.v;
 		XMVECTOR vectorTemp;
-		pointCoordSystem = XMMatrixInverse(&vectorTemp,XMMATRIX(pointDir1,pointDir2,pointDir3,XMVectorZero()));
-		pointCoord = XMVector3Transform(XMVectorSubtract(rayPointDir.v,rayPointEye.v),pointCoordSystem);
-		if(XMVectorGetX(pointCoord) > 0 && XMVectorGetY(pointCoord) > 0 && XMVectorGetZ(pointCoord) > 0)
+		triangleCoordSystem = XMMATRIX(pointDir1,pointDir2,pointDir3,XMVectorSet(0.0f,0.0f,0.0f,1.0f));
+		pointCoordSystem = XMMatrixInverse(&vectorTemp,triangleCoordSystem);
+		if(XMMatrixIsInfinite(pointCoordSystem))
+		{
+			return false;
+		}
+		pointCoord = XMVector3Transform(rayPointDir.v - rayPointEye.v,pointCoordSystem);
+		if(XMVectorGetX(pointCoord) > 0.0f && XMVectorGetY(pointCoord) > 0.0f && XMVectorGetZ(pointCoord) > 0.0f)
 			return true;
 		else
 			return false;
