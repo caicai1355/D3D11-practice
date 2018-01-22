@@ -36,20 +36,27 @@
 #include <comdef.h>
 #endif
 
+#define SCREEN_SIZE 1
+#if SCREEN_SIZE == 1
 #define WIDTH 100
 #define HEIGHT 100 
 #define POS_X 1200 
 #define POS_Y 700
-
-//#define WIDTH 500
-//#define HEIGHT 500 
-//#define POS_X 600 
-//#define POS_Y 200
-
-//#define WIDTH 1800
-//#define HEIGHT 1000 
-//#define POS_X 10 
-//#define POS_Y 10
+#else
+#if SCREEN_SIZE == 2
+#define WIDTH 500
+#define HEIGHT 500 
+#define POS_X 600 
+#define POS_Y 200
+#else
+#if SCREEN_SIZE == 3
+#define WIDTH 1800
+#define HEIGHT 1000 
+#define POS_X 10 
+#define POS_Y 10
+#endif
+#endif
+#endif
 
 //#define LIGHT_TYPE_VERTEX_NORMAL
 #define LIGHT_TYPE_PLANE_NORMAL
@@ -441,7 +448,8 @@ void DrawBottle(bool isBlend);
 
 void UpdateScene(double currentFrameTime);
 void GetRayCast();
-bool MouseHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3);
+bool MouseHitDetect(ModelData & modelData,CXMMATRIX worldSpaceTemp);
+bool TriangleHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3);
 void DrawScene();
 
 LRESULT CALLBACK WinProc(HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam)
@@ -2132,47 +2140,64 @@ void GetRayCast()
 	rayPointEye = eyePos;
 	rayPointDir.v = XMVector3TransformCoord(viewPoint.v,inverseViewSpace);
 }
-bool MouseHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3)
+
+bool MouseHitDetect(ModelData & modelData,CXMMATRIX worldSpaceTemp)
+{
+	XMVECTORF32 point1,point2,point3;
+	for(int i = 0,iLen = modelData.indexVec.size();i < iLen;i+=3)
+	{
+		point1.v =  XMVector3TransformCoord(XMLoadFloat3(&(modelData.vertexVec[modelData.indexVec[i]].position)),worldSpaceTemp);
+		point2.v =  XMVector3TransformCoord(XMLoadFloat3(&(modelData.vertexVec[modelData.indexVec[i+1]].position)),worldSpaceTemp);
+		point3.v =  XMVector3TransformCoord(XMLoadFloat3(&(modelData.vertexVec[modelData.indexVec[i+2]].position)),worldSpaceTemp);
+		if(TriangleHitDetect(point1.f,point2.f,point3.f))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+bool TriangleHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3)
 {
 	//1
 	{
-		//XMVECTOR point1Vec,point2Vec,point3Vec;
-		//XMVECTORF32 dir1_2,dir1_3;
-		//XMVECTORF32 planeNormal;
-		//XMVECTOR pointEyeToPlane;
-		//float planeParaA,planeParaB,planeParaC,planeParaD;
-		//float distanceEye,distanceDir;
-		//float t = 0.0f;
+		XMVECTOR point1Vec,point2Vec,point3Vec;
+		XMVECTORF32 dir1_2,dir1_3;
+		XMVECTORF32 planeNormal;
+		XMVECTOR pointEyeToPlane;
+		float planeParaA,planeParaB,planeParaC,planeParaD;
+		float distanceEye,distanceDir;
+		float t = 0.0f;
 
-		//point1Vec =  XMVectorSetW(XMLoadFloat3(&point1),1.0f);
-		//point2Vec =  XMVectorSetW(XMLoadFloat3(&point2),1.0f);
-		//point3Vec =  XMVectorSetW(XMLoadFloat3(&point3),1.0f);
+		point1Vec =  XMVectorSetW(XMLoadFloat3(&point1),1.0f);
+		point2Vec =  XMVectorSetW(XMLoadFloat3(&point2),1.0f);
+		point3Vec =  XMVectorSetW(XMLoadFloat3(&point3),1.0f);
 
-		//dir1_2.v = XMVectorSet(point2.x-point1.x,point2.y-point1.y,point2.z-point1.z,0.0f);
-		//dir1_3.v = XMVectorSet(point3.x-point1.x,point3.y-point1.y,point3.z-point1.z,0.0f);
-		//planeNormal.v = XMVector3Cross(dir1_2,dir1_3);
-		//planeParaA = planeNormal.f[0];
-		//planeParaB = planeNormal.f[1];
-		//planeParaC = planeNormal.f[2];
-		//planeParaD = -(planeParaA * point1.x + planeParaB * point1.y + planeParaC * point1.z);
-		//distanceEye = planeParaA * rayPointEye.f[0] + planeParaB * rayPointEye.f[1] + planeParaC * rayPointEye.f[2] + planeParaD; 
-		//distanceDir = planeParaA * rayPointDir.f[0] + planeParaB * rayPointDir.f[1] + planeParaC * rayPointDir.f[2] + planeParaD;
-		//if(distanceEye == distanceDir)return false;
-		//t = distanceEye/(distanceEye - distanceDir);
-		//if(t < 0.0f)return false;
-		//pointEyeToPlane = rayPointEye.v + XMVectorScale(XMVectorSubtract(rayPointDir.v,rayPointEye.v),t);
+		dir1_2.v = XMVectorSet(point2.x-point1.x,point2.y-point1.y,point2.z-point1.z,0.0f);
+		dir1_3.v = XMVectorSet(point3.x-point1.x,point3.y-point1.y,point3.z-point1.z,0.0f);
+		planeNormal.v = XMVector3Cross(dir1_2,dir1_3);
+		planeParaA = planeNormal.f[0];
+		planeParaB = planeNormal.f[1];
+		planeParaC = planeNormal.f[2];
+		planeParaD = -(planeParaA * point1.x + planeParaB * point1.y + planeParaC * point1.z);
+		distanceEye = planeParaA * rayPointEye.f[0] + planeParaB * rayPointEye.f[1] + planeParaC * rayPointEye.f[2] + planeParaD; 
+		distanceDir = planeParaA * rayPointDir.f[0] + planeParaB * rayPointDir.f[1] + planeParaC * rayPointDir.f[2] + planeParaD;
+		if(distanceEye == distanceDir)return false;
+		t = distanceEye/(distanceEye - distanceDir);
+		if(t < 0.0f)return false;
+		pointEyeToPlane = rayPointEye.v + XMVectorScale(XMVectorSubtract(rayPointDir.v,rayPointEye.v),t);
 
-		//XMVECTOR lineSeg1,lineSeg2,lineSeg3;
-		//XMVECTOR crossVec1,crossVec2,crossVec3;
-		//lineSeg1 = point1Vec - pointEyeToPlane;
-		//lineSeg2 = point2Vec - pointEyeToPlane;
-		//lineSeg3 = point3Vec - pointEyeToPlane;
-		//crossVec1 = XMVector3Cross(lineSeg1,lineSeg2);
-		//crossVec2 = XMVector3Cross(lineSeg2,lineSeg3);
-		//if(XMVectorGetX(XMVector3Dot(crossVec1,crossVec2)) <= 0.0f)return false;
-		//crossVec3 = XMVector3Cross(lineSeg3,lineSeg1);
-		//if(XMVectorGetX(XMVector3Dot(crossVec2,crossVec3)) <= 0.0f)return false;
-		//return true;
+		XMVECTOR lineSeg1,lineSeg2,lineSeg3;
+		XMVECTOR crossVec1,crossVec2,crossVec3;
+		lineSeg1 = point1Vec - pointEyeToPlane;
+		lineSeg2 = point2Vec - pointEyeToPlane;
+		lineSeg3 = point3Vec - pointEyeToPlane;
+		crossVec1 = XMVector3Cross(lineSeg1,lineSeg2);
+		crossVec2 = XMVector3Cross(lineSeg2,lineSeg3);
+		if(XMVectorGetX(XMVector3Dot(crossVec1,crossVec2)) <= 0.0f)return false;
+		crossVec3 = XMVector3Cross(lineSeg3,lineSeg1);
+		if(XMVectorGetX(XMVector3Dot(crossVec2,crossVec3)) <= 0.0f)return false;
+		return true;
 	}
 
 	//2
@@ -2188,32 +2213,32 @@ bool MouseHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3)
 
 	//3
 	{
-		XMVECTOR point1Vec,point2Vec,point3Vec;
-		XMVECTOR pointDir1,pointDir2,pointDir3,rayDir;
-		XMMATRIX pointCoordSystem;
-		XMMATRIX triangleCoordSystem;
-		XMVECTOR pointCoord;
+		//XMVECTOR point1Vec,point2Vec,point3Vec;
+		//XMVECTOR pointDir1,pointDir2,pointDir3,rayDir;
+		//XMMATRIX pointCoordSystem;
+		//XMMATRIX triangleCoordSystem;
+		//XMVECTOR pointCoord;
 
-		point1Vec =  XMVectorSetW(XMLoadFloat3(&point1),1.0f);
-		point2Vec =  XMVectorSetW(XMLoadFloat3(&point2),1.0f);
-		point3Vec =  XMVectorSetW(XMLoadFloat3(&point3),1.0f);
+		//point1Vec =  XMVectorSetW(XMLoadFloat3(&point1),1.0f);
+		//point2Vec =  XMVectorSetW(XMLoadFloat3(&point2),1.0f);
+		//point3Vec =  XMVectorSetW(XMLoadFloat3(&point3),1.0f);
 
-		pointDir1 = point1Vec - rayPointEye.v;
-		pointDir2 = point2Vec - rayPointEye.v;
-		pointDir3 = point3Vec - rayPointEye.v;
-		rayDir = rayPointDir.v - rayPointEye.v;
-		XMVECTOR vectorTemp;
-		triangleCoordSystem = XMMATRIX(pointDir1,pointDir2,pointDir3,XMVectorSet(0.0f,0.0f,0.0f,1.0f));
-		pointCoordSystem = XMMatrixInverse(&vectorTemp,triangleCoordSystem);
-		if(XMMatrixIsInfinite(pointCoordSystem))
-		{
-			return false;
-		}
-		pointCoord = XMVector3Transform(rayPointDir.v - rayPointEye.v,pointCoordSystem);
-		if(XMVectorGetX(pointCoord) > 0.0f && XMVectorGetY(pointCoord) > 0.0f && XMVectorGetZ(pointCoord) > 0.0f)
-			return true;
-		else
-			return false;
+		//pointDir1 = point1Vec - rayPointEye.v;
+		//pointDir2 = point2Vec - rayPointEye.v;
+		//pointDir3 = point3Vec - rayPointEye.v;
+		//rayDir = rayPointDir.v - rayPointEye.v;
+		//XMVECTOR vectorTemp;
+		//triangleCoordSystem = XMMATRIX(pointDir1,pointDir2,pointDir3,XMVectorSet(0.0f,0.0f,0.0f,1.0f));
+		//pointCoordSystem = XMMatrixInverse(&vectorTemp,triangleCoordSystem);
+		//if(XMMatrixIsInfinite(pointCoordSystem))
+		//{
+		//	return false;
+		//}
+		//pointCoord = XMVector3Transform(rayPointDir.v - rayPointEye.v,pointCoordSystem);
+		//if(XMVectorGetX(pointCoord) > 0.0f && XMVectorGetY(pointCoord) > 0.0f && XMVectorGetZ(pointCoord) > 0.0f)
+		//	return true;
+		//else
+		//	return false;
 	}
 }
 
@@ -2223,7 +2248,6 @@ void DrawBottle(bool isBlend)
 	static XMMATRIX worldSpaceTemp[BOTTLE_NUM];
 	static bool isAlive[BOTTLE_NUM];
 	static bool firstCall = true;
-	XMVECTORF32 point1,point2,point3;
 	if(firstCall == true)
 	{
 		for(int i = 0,len = BOTTLE_NUM;i < len;i++)
@@ -2241,10 +2265,7 @@ void DrawBottle(bool isBlend)
 		{
 			for(int j = 0,jLen = modelBottle.indexVec.size();j < jLen;j+=3)
 			{
-				point1.v =  XMVector3TransformCoord(XMLoadFloat3(&(modelBottle.vertexVec[modelBottle.indexVec[j]].position)),worldSpaceTemp[i]);
-				point2.v =  XMVector3TransformCoord(XMLoadFloat3(&(modelBottle.vertexVec[modelBottle.indexVec[j+1]].position)),worldSpaceTemp[i]);
-				point3.v =  XMVector3TransformCoord(XMLoadFloat3(&(modelBottle.vertexVec[modelBottle.indexVec[j+2]].position)),worldSpaceTemp[i]);
-				if(MouseHitDetect(point1.f,point2.f,point3.f))
+				if(!MouseHitDetect(modelBottle,worldSpaceTemp[i]))
 				{
 					isAlive[i] = false;
 					break;
