@@ -36,7 +36,7 @@
 #include <comdef.h>
 #endif
 
-#define SCREEN_SIZE 1
+#define SCREEN_SIZE 3
 #if SCREEN_SIZE == 1
 #define WIDTH 100
 #define HEIGHT 100 
@@ -2263,13 +2263,10 @@ void DrawBottle(bool isBlend)
 	{	
 		for(int i = 0,iLen = BOTTLE_NUM;i < iLen;i++)
 		{
-			for(int j = 0,jLen = modelBottle.indexVec.size();j < jLen;j+=3)
+			if(!MouseHitDetect(modelBottle,worldSpaceTemp[i]))
 			{
-				if(!MouseHitDetect(modelBottle,worldSpaceTemp[i]))
-				{
-					isAlive[i] = false;
-					break;
-				}
+				isAlive[i] = false;
+				break;
 			}
 		}
 	}
