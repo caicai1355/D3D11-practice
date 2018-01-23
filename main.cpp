@@ -36,7 +36,7 @@
 #include <comdef.h>
 #endif
 
-#define SCREEN_SIZE 3
+#define SCREEN_SIZE 1
 #if SCREEN_SIZE == 1
 #define WIDTH 100
 #define HEIGHT 100 
@@ -135,6 +135,8 @@ struct MaterialMsg	//.mtl文件的mtl数据
 
 struct Vertex
 {
+	Vertex(XMFLOAT3 pos = XMFLOAT3(),XMFLOAT2 texCoord = XMFLOAT2(),XMFLOAT3 nor = XMFLOAT3(),XMFLOAT3 tng = XMFLOAT3()):position(pos),textureCoordinate(texCoord),normal(nor),tangent(tng)
+	{}
 	XMFLOAT3 position;
 	XMFLOAT2 textureCoordinate;
 	XMFLOAT3 normal;
@@ -186,18 +188,29 @@ struct ConstSpotLight
 	SpotLight spotLight;
 };
 
+#define MODEL_NULL 0
+#define MODEL_ISINIT 1
+#define MODEL_COLLIDER 2
 struct ModelData
 {
 	ModelData()
 	{
-		isInit = false;
+		type = MODEL_NULL;
+		modelVertexBuffer = NULL;
+		modelIndexBuffer = NULL;
 	}
 	ID3D11Buffer *modelVertexBuffer;
 	ID3D11Buffer *modelIndexBuffer;
 	std::vector<SurfaceMaterial> modelSurMetVec;
 	std::vector<Vertex> vertexVec;	//生成的vertex序列
 	std::vector<DWORD> indexVec;	//vertMsgVec里面的vertex信息对应的index序列（其实也是最终的用来构造index的序列）
-	bool isInit;
+	int type;
+};
+
+struct ModelColliderData:public ModelData
+{
+	XMVECTORF32 modelCentrePoint;
+	float centreRadius;
 };
 
 HWND hwnd;
@@ -279,8 +292,9 @@ ID3D11DepthStencilState  *skyboxDepthStencilState;
 struct ModelData modelHouse;
 struct ModelData modelGround;
 struct ModelData modelBottle;
+struct ModelColliderData colliderBottle;
 
-//raycast
+//raycast(world space)
 XMVECTORF32 rayPointEye;
 XMVECTORF32 rayPointDir; 
 
@@ -323,80 +337,80 @@ Vertex vertex[] =
 {
 #ifdef LIGHT_TYPE_VERTEX_NORMAL
 //顶点法向量
-	{cubeVertex0,leftUp,cubeVertex0},
-	{cubeVertex1,rightUp,cubeVertex1},
-	{cubeVertex2,leftDown,cubeVertex2},
-	{cubeVertex3,rightDown,cubeVertex3},
+	Vertex(cubeVertex0,leftUp,cubeVertex0},
+	Vertex(cubeVertex1,rightUp,cubeVertex1},
+	Vertex(cubeVertex2,leftDown,cubeVertex2},
+	Vertex(cubeVertex3,rightDown,cubeVertex3},
 	
-	{cubeVertex4,leftUp,cubeVertex4},
-	{cubeVertex0,rightUp,cubeVertex0},
-	{cubeVertex6,leftDown,cubeVertex6},
-	{cubeVertex2,rightDown,cubeVertex2},
+	Vertex(cubeVertex4,leftUp,cubeVertex4},
+	Vertex(cubeVertex0,rightUp,cubeVertex0},
+	Vertex(cubeVertex6,leftDown,cubeVertex6},
+	Vertex(cubeVertex2,rightDown,cubeVertex2},
 	
-	{cubeVertex4,leftUp,cubeVertex4},
-	{cubeVertex5,rightUp,cubeVertex5},
-	{cubeVertex0,leftDown,cubeVertex0},
-	{cubeVertex1,rightDown,cubeVertex1},
+	Vertex(cubeVertex4,leftUp,cubeVertex4},
+	Vertex(cubeVertex5,rightUp,cubeVertex5},
+	Vertex(cubeVertex0,leftDown,cubeVertex0},
+	Vertex(cubeVertex1,rightDown,cubeVertex1},
 	
-	{cubeVertex1,leftUp,cubeVertex1},
-	{cubeVertex5,rightUp,cubeVertex5},
-	{cubeVertex3,leftDown,cubeVertex3},
-	{cubeVertex7,rightDown,cubeVertex7},
+	Vertex(cubeVertex1,leftUp,cubeVertex1},
+	Vertex(cubeVertex5,rightUp,cubeVertex5},
+	Vertex(cubeVertex3,leftDown,cubeVertex3},
+	Vertex(cubeVertex7,rightDown,cubeVertex7},
 	
-	{cubeVertex7,leftUp,cubeVertex7},
-	{cubeVertex6,rightUp,cubeVertex6},
-	{cubeVertex3,leftDown,cubeVertex3},
-	{cubeVertex2,rightDown,cubeVertex2},
+	Vertex(cubeVertex7,leftUp,cubeVertex7},
+	Vertex(cubeVertex6,rightUp,cubeVertex6},
+	Vertex(cubeVertex3,leftDown,cubeVertex3},
+	Vertex(cubeVertex2,rightDown,cubeVertex2},
 	
-	{cubeVertex5,leftUp,cubeVertex5},
-	{cubeVertex4,rightUp,cubeVertex4},
-	{cubeVertex7,leftDown,cubeVertex7},
-	{cubeVertex6,rightDown,cubeVertex6},
+	Vertex(cubeVertex5,leftUp,cubeVertex5},
+	Vertex(cubeVertex4,rightUp,cubeVertex4},
+	Vertex(cubeVertex7,leftDown,cubeVertex7},
+	Vertex(cubeVertex6,rightDown,cubeVertex6},
 		
-	{XMFLOAT3(-10.0f,0.0f,10.0f),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
-	{XMFLOAT3(10.0f,0.0f,10.0f),XMFLOAT2(10.0f,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
-	{XMFLOAT3(-10.0f,0.0f,-10.0f),XMFLOAT2(0.0f,10.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
-	{XMFLOAT3(10.0f,0.0f,-10.0f),XMFLOAT2(10.0f,10.0f),XMFLOAT3(0.0f,1.0f,0.0f)},
+	Vertex(XMFLOAT3(-10.0f,0.0f,10.0f),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)),
+	Vertex(XMFLOAT3(10.0f,0.0f,10.0f),XMFLOAT2(10.0f,0.0f),XMFLOAT3(0.0f,1.0f,0.0f)),
+	Vertex(XMFLOAT3(-10.0f,0.0f,-10.0f),XMFLOAT2(0.0f,10.0f),XMFLOAT3(0.0f,1.0f,0.0f)),
+	Vertex(XMFLOAT3(10.0f,0.0f,-10.0f),XMFLOAT2(10.0f,10.0f),XMFLOAT3(0.0f,1.0f,0.0f)),
 #endif
 #ifdef LIGHT_TYPE_PLANE_NORMAL
 //平面法向量
 	//two boxes
-	{cubeVertex0,leftUp,XMFLOAT3(0.0f,0.0f,-1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
-	{cubeVertex1,rightUp,XMFLOAT3(0.0f,0.0f,-1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
-	{cubeVertex2,leftDown,XMFLOAT3(0.0f,0.0f,-1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
-	{cubeVertex3,rightDown,XMFLOAT3(0.0f,0.0f,-1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
+	Vertex(cubeVertex0,leftUp,XMFLOAT3(0.0f,0.0f,-1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)),
+	Vertex(cubeVertex1,rightUp,XMFLOAT3(0.0f,0.0f,-1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)),
+	Vertex(cubeVertex2,leftDown,XMFLOAT3(0.0f,0.0f,-1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)),
+	Vertex(cubeVertex3,rightDown,XMFLOAT3(0.0f,0.0f,-1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)),
 	
-	{cubeVertex4,leftUp,XMFLOAT3(-1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
-	{cubeVertex0,rightUp,XMFLOAT3(-1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
-	{cubeVertex6,leftDown,XMFLOAT3(-1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
-	{cubeVertex2,rightDown,XMFLOAT3(-1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
+	Vertex(cubeVertex4,leftUp,XMFLOAT3(-1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)),
+	Vertex(cubeVertex0,rightUp,XMFLOAT3(-1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)),
+	Vertex(cubeVertex6,leftDown,XMFLOAT3(-1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)),
+	Vertex(cubeVertex2,rightDown,XMFLOAT3(-1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)),
 	
-	{cubeVertex4,leftUp,XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
-	{cubeVertex5,rightUp,XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
-	{cubeVertex0,leftDown,XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
-	{cubeVertex1,rightDown,XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
+	Vertex(cubeVertex4,leftUp,XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)),
+	Vertex(cubeVertex5,rightUp,XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)),
+	Vertex(cubeVertex0,leftDown,XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)),
+	Vertex(cubeVertex1,rightDown,XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)),
 	
-	{cubeVertex1,leftUp,XMFLOAT3(1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
-	{cubeVertex5,rightUp,XMFLOAT3(1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
-	{cubeVertex3,leftDown,XMFLOAT3(1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
-	{cubeVertex7,rightDown,XMFLOAT3(1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
+	Vertex(cubeVertex1,leftUp,XMFLOAT3(1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)),
+	Vertex(cubeVertex5,rightUp,XMFLOAT3(1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)),
+	Vertex(cubeVertex3,leftDown,XMFLOAT3(1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)),
+	Vertex(cubeVertex7,rightDown,XMFLOAT3(1.0f,0.0f,0.0f),XMFLOAT3(0.0f,-1.0f,0.0f)),
 	
-	{cubeVertex7,leftUp,XMFLOAT3(0.0f,-1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
-	{cubeVertex6,rightUp,XMFLOAT3(0.0f,-1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
-	{cubeVertex3,leftDown,XMFLOAT3(0.0f,-1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
-	{cubeVertex2,rightDown,XMFLOAT3(0.0f,-1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
+	Vertex(cubeVertex7,leftUp,XMFLOAT3(0.0f,-1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)),
+	Vertex(cubeVertex6,rightUp,XMFLOAT3(0.0f,-1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)),
+	Vertex(cubeVertex3,leftDown,XMFLOAT3(0.0f,-1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)),
+	Vertex(cubeVertex2,rightDown,XMFLOAT3(0.0f,-1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)),
 	
-	{cubeVertex5,leftUp,XMFLOAT3(0.0f,0.0f,1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
-	{cubeVertex4,rightUp,XMFLOAT3(0.0f,0.0f,1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
-	{cubeVertex7,leftDown,XMFLOAT3(0.0f,0.0f,1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
-	{cubeVertex6,rightDown,XMFLOAT3(0.0f,0.0f,1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)},
+	Vertex(cubeVertex5,leftUp,XMFLOAT3(0.0f,0.0f,1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)),
+	Vertex(cubeVertex4,rightUp,XMFLOAT3(0.0f,0.0f,1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)),
+	Vertex(cubeVertex7,leftDown,XMFLOAT3(0.0f,0.0f,1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)),
+	Vertex(cubeVertex6,rightDown,XMFLOAT3(0.0f,0.0f,1.0f),XMFLOAT3(0.0f,-1.0f,0.0f)),
 
 	//grass
 #define PLAIN_SIZE 100.0f		
-	{XMFLOAT3(-PLAIN_SIZE,-1.0f,PLAIN_SIZE),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
-	{XMFLOAT3(PLAIN_SIZE,-1.0f,PLAIN_SIZE),XMFLOAT2(PLAIN_SIZE,0.0f),XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
-	{XMFLOAT3(-PLAIN_SIZE,-1.0f,-PLAIN_SIZE),XMFLOAT2(0.0f,PLAIN_SIZE),XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
-	{XMFLOAT3(PLAIN_SIZE,-1.0f,-PLAIN_SIZE),XMFLOAT2(PLAIN_SIZE,PLAIN_SIZE),XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)},
+	Vertex(XMFLOAT3(-PLAIN_SIZE,-1.0f,PLAIN_SIZE),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)),
+	Vertex(XMFLOAT3(PLAIN_SIZE,-1.0f,PLAIN_SIZE),XMFLOAT2(PLAIN_SIZE,0.0f),XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)),
+	Vertex(XMFLOAT3(-PLAIN_SIZE,-1.0f,-PLAIN_SIZE),XMFLOAT2(0.0f,PLAIN_SIZE),XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)),
+	Vertex(XMFLOAT3(PLAIN_SIZE,-1.0f,-PLAIN_SIZE),XMFLOAT2(PLAIN_SIZE,PLAIN_SIZE),XMFLOAT3(0.0f,1.0f,0.0f),XMFLOAT3(0.0f,0.0f,-1.0f)),
 #endif
 };
 DWORD index[] = 
@@ -441,14 +455,18 @@ void DetectInput(double time);
 void SkyBoxInit();
 
 bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoord,bool isCalcNormal);
+void makeCollider(ModelData &sourceModelData,ModelColliderData &destColliderData);
 void DrawModelNonBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);
 void DrawModelBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);
 
 void DrawBottle(bool isBlend);
 
+#define DETECT_METHOD_MODEL 0
+#define DETECT_METHOD_BOUNDING_SPHERE 1
+#define DETECT_METHOD_BOUNDING_MODEL_AND_SPHERE 2
 void UpdateScene(double currentFrameTime);
 void GetRayCast();
-bool MouseHitDetect(ModelData & modelData,CXMMATRIX worldSpaceTemp);
+bool MouseHitDetect(ModelData & modelData,CXMMATRIX worldSpaceTemp,int method);
 bool TriangleHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3);
 void DrawScene();
 
@@ -1322,7 +1340,7 @@ bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoo
 
 		hr = d3dDevice->CreateBuffer(&indexBufferDesc,&indexData,&(modelData->modelIndexBuffer));
 		HR(hr);
-		modelData->isInit = true;
+		modelData->type = MODEL_ISINIT;
 
 		return true;
 	}
@@ -1333,6 +1351,61 @@ bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoo
 		errorString += L"\" error!";
 		MessageBox(hwnd,errorString.c_str(),L"error",MB_OK);
 		return false;
+	}
+}
+
+void makeCollider(ModelData &sourceModelData,ModelColliderData &destColliderData)
+{
+	float maxX = FLT_MAX,minX = -FLT_MAX,maxY = FLT_MAX,minY = -FLT_MAX,maxZ = FLT_MAX,minZ = -FLT_MAX;
+	for(int i = 0,iLen = sourceModelData.indexVec.size();i < iLen;i++)
+	{
+		maxX = max(sourceModelData.vertexVec[sourceModelData.indexVec[i]].position.x,maxX);
+		maxY = max(sourceModelData.vertexVec[sourceModelData.indexVec[i]].position.y,maxY);
+		maxZ = max(sourceModelData.vertexVec[sourceModelData.indexVec[i]].position.z,maxZ);
+		
+		minX = min(sourceModelData.vertexVec[sourceModelData.indexVec[i]].position.x,minX);
+		minY = min(sourceModelData.vertexVec[sourceModelData.indexVec[i]].position.y,minY);
+		minZ = min(sourceModelData.vertexVec[sourceModelData.indexVec[i]].position.z,minZ);
+	}
+	destColliderData.modelCentrePoint.f[0] = (maxX + minX)/2.0f;
+	destColliderData.modelCentrePoint.f[1] = (maxY + minY)/2.0f;
+	destColliderData.modelCentrePoint.f[2] = (maxZ + minZ)/2.0f;
+	destColliderData.modelCentrePoint.f[3] = 1.0f;
+	destColliderData.centreRadius = XMVectorGetX(XMVector3Length(destColliderData.modelCentrePoint.v));
+	destColliderData.type = MODEL_COLLIDER;
+	
+	destColliderData.vertexVec.push_back(Vertex(XMFLOAT3(minX,maxY,minZ)));
+	destColliderData.vertexVec.push_back(Vertex(XMFLOAT3(maxX,maxY,minZ)));
+	destColliderData.vertexVec.push_back(Vertex(XMFLOAT3(minX,minY,minZ)));
+	destColliderData.vertexVec.push_back(Vertex(XMFLOAT3(maxX,minY,minZ)));
+	destColliderData.vertexVec.push_back(Vertex(XMFLOAT3(minX,maxY,maxZ)));
+	destColliderData.vertexVec.push_back(Vertex(XMFLOAT3(maxX,maxY,maxZ)));
+	destColliderData.vertexVec.push_back(Vertex(XMFLOAT3(minX,minY,maxZ)));
+	destColliderData.vertexVec.push_back(Vertex(XMFLOAT3(maxX,minY,maxZ)));
+	
+	DWORD indexTemp[] = 
+	{
+		0, 1, 2,
+		0, 2, 3,
+
+		4, 6, 5,
+		4, 7, 6,
+
+		4, 5, 1,
+		4, 1, 0,
+		
+		3, 2, 6,
+		3, 6, 7,
+
+		1, 5, 6,
+		1, 6, 2,
+
+		4, 0, 3, 
+		4, 3, 7
+	};
+	for(int i = 0;i < 36;i++)
+	{
+		destColliderData.indexVec.push_back(indexTemp[i]);
 	}
 }
 
@@ -1554,14 +1627,14 @@ void SkyBoxInit()
 
 	Vertex skyBoxVertex[] = 
 	{	
-		{XMFLOAT3(-1.0,1.0,1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)},
-		{XMFLOAT3(1.0,1.0,1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)},
-		{XMFLOAT3(-1.0,-1.0,1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)},
-		{XMFLOAT3(1.0,-1.0,1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)},
-		{XMFLOAT3(-1.0,1.0,-1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)},
-		{XMFLOAT3(1.0,1.0,-1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)},
-		{XMFLOAT3(-1.0,-1.0,-1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)},
-		{XMFLOAT3(1.0,-1.0,-1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)},
+		Vertex(XMFLOAT3(-1.0,1.0,1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)),
+		Vertex(XMFLOAT3(1.0,1.0,1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)),
+		Vertex(XMFLOAT3(-1.0,-1.0,1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)),
+		Vertex(XMFLOAT3(1.0,-1.0,1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)),
+		Vertex(XMFLOAT3(-1.0,1.0,-1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)),
+		Vertex(XMFLOAT3(1.0,1.0,-1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)),
+		Vertex(XMFLOAT3(-1.0,-1.0,-1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)),
+		Vertex(XMFLOAT3(1.0,-1.0,-1.0),XMFLOAT2(0.0f,0.0f),XMFLOAT3(0.0f,0.0f,1.0f)),
 	};
 	UINT skyBoxIndex[] = 
 	{
@@ -1643,10 +1716,10 @@ void IAInitText()
 {
 	Vertex textVertex[] = 
 	{
-		{XMFLOAT3(-1.0f,1.0f,0.0f),leftUp,XMFLOAT3(0.0f,0.0f,-1.0f)},
-		{XMFLOAT3(1.0f,1.0f,0.0f),rightUp,XMFLOAT3(0.0f,0.0f,-1.0f)},
-		{XMFLOAT3(-1.0f,-1.0f,0.0f),leftDown,XMFLOAT3(0.0f,0.0f,-1.0f)},
-		{XMFLOAT3(1.0f,-1.0f,0.0f),rightDown,XMFLOAT3(0.0f,0.0f,-1.0f)},
+		Vertex(XMFLOAT3(-1.0f,1.0f,0.0f),leftUp,XMFLOAT3(0.0f,0.0f,-1.0f)),
+		Vertex(XMFLOAT3(1.0f,1.0f,0.0f),rightUp,XMFLOAT3(0.0f,0.0f,-1.0f)),
+		Vertex(XMFLOAT3(-1.0f,-1.0f,0.0f),leftDown,XMFLOAT3(0.0f,0.0f,-1.0f)),
+		Vertex(XMFLOAT3(1.0f,-1.0f,0.0f),rightDown,XMFLOAT3(0.0f,0.0f,-1.0f)),
 	};
 	DWORD textIndex[] = 
 	{
@@ -1714,6 +1787,7 @@ int CALLBACK WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine
 	LoadObjModel(L"spaceCompound.obj",&modelHouse,true,false);
 	LoadObjModel(L"ground.obj",&modelGround,true,false);
 	LoadObjModel(L"bottle.obj",&modelBottle,true,true);
+	makeCollider(modelBottle,colliderBottle);
 	InitDirectInput(hInstance);
 	RenderPipeline();
 	messageLoop();
@@ -1896,55 +1970,7 @@ void DrawModelNonBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRI
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
 
-	if(modelData->isInit == false)return;
-
-	d3dDeviceContext->IASetVertexBuffers(0,1,&(modelData->modelVertexBuffer),&stride,&offset);
-	d3dDeviceContext->IASetIndexBuffer(modelData->modelIndexBuffer,DXGI_FORMAT_R32_UINT,0);
-	d3dDeviceContext->VSSetShader(VS,0,0);
-	if(isBias)
-		d3dDeviceContext->RSSetState(rasterState_cwnc_bias);
-	else
-		d3dDeviceContext->RSSetState(rasterState_cwnc);
-	d3dDeviceContext->PSSetShader(PS,0,0);
-	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
-	d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
-	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * projectionMatrix);
-	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
-	for(int i = 0,len = modelData->modelSurMetVec.size();i < len;i++)
-	{
-		if(modelData->modelSurMetVec[i].isTransparent == false)
-		{
-			indexStart = modelData->modelSurMetVec[i].texArrayIndex;
-			indexCount = modelData->modelSurMetVec[i].indexCount;
-			if(modelData->modelSurMetVec[i].hasTexture == true)
-			{
-				d3dDeviceContext->PSSetShaderResources(0,1,&(modelData->modelSurMetVec[i].shaderResourceView));
-			}
-			else
-			{
-				constSpace.difColor = modelData->modelSurMetVec[i].difColor;
-			}
-			if(modelData->modelSurMetVec[i].hasNormalMap)
-			{
-				d3dDeviceContext->PSSetShaderResources(1,1,&(modelData->modelSurMetVec[i].normalMapResourceView));
-			}
-			constSpace.hasTexture = modelData->modelSurMetVec[i].hasTexture;
-			constSpace.hasNormalMap = modelData->modelSurMetVec[i].hasNormalMap;
-			d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
-			d3dDeviceContext->DrawIndexed(indexCount,indexStart,0);
-		}
-	}
-}
-
-void DrawModelNonBlendBottle(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias)
-{
-	UINT indexStart = 0;
-	UINT indexCount = 0;
-	//no blend
-	UINT stride = sizeof(Vertex);
-	UINT offset = 0;
-
-	if(modelData->isInit == false)return;
+	if(modelData->type == MODEL_NULL)return;
 
 	d3dDeviceContext->IASetVertexBuffers(0,1,&(modelData->modelVertexBuffer),&stride,&offset);
 	d3dDeviceContext->IASetIndexBuffer(modelData->modelIndexBuffer,DXGI_FORMAT_R32_UINT,0);
@@ -1992,7 +2018,7 @@ void DrawModelBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX v
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
 
-	if(modelData->isInit == false)return;
+	if(modelData->type == MODEL_NULL)return;
 
 	d3dDeviceContext->IASetVertexBuffers(0,1,&(modelData->modelVertexBuffer),&stride,&offset);
 	d3dDeviceContext->IASetIndexBuffer(modelData->modelIndexBuffer,DXGI_FORMAT_R32_UINT,0);
@@ -2141,9 +2167,25 @@ void GetRayCast()
 	rayPointDir.v = XMVector3TransformCoord(viewPoint.v,inverseViewSpace);
 }
 
-bool MouseHitDetect(ModelData & modelData,CXMMATRIX worldSpaceTemp)
+bool MouseHitDetect(ModelData & modelData,CXMMATRIX worldSpaceTemp,int method = DETECT_METHOD_MODEL)
 {
 	XMVECTORF32 point1,point2,point3;
+	if(modelData.type == MODEL_COLLIDER && (method == DETECT_METHOD_BOUNDING_SPHERE || method == DETECT_METHOD_BOUNDING_MODEL_AND_SPHERE))
+	{
+		ModelColliderData &colliderDataTemp = ((ModelColliderData&)modelData);
+		float distance;
+		XMVECTOR centreWorld;
+		centreWorld = XMVector3TransformCoord(colliderDataTemp.modelCentrePoint.v,worldSpaceTemp);
+		distance = XMVectorGetX(XMVector3Length(XMVector3Cross(centreWorld - rayPointEye.v,centreWorld - rayPointDir.v)) / XMVector3Length(rayPointDir.v - rayPointEye.v));
+		if(distance > colliderDataTemp.centreRadius)
+		{
+			return false;
+		}
+		else if(method == DETECT_METHOD_BOUNDING_SPHERE)
+		{
+			return true;
+		}
+	}
 	for(int i = 0,iLen = modelData.indexVec.size();i < iLen;i+=3)
 	{
 		point1.v =  XMVector3TransformCoord(XMLoadFloat3(&(modelData.vertexVec[modelData.indexVec[i]].position)),worldSpaceTemp);
@@ -2263,7 +2305,8 @@ void DrawBottle(bool isBlend)
 	{	
 		for(int i = 0,iLen = BOTTLE_NUM;i < iLen;i++)
 		{
-			if(!MouseHitDetect(modelBottle,worldSpaceTemp[i]))
+			//if(!MouseHitDetect(modelBottle,worldSpaceTemp[i],DETECT_METHOD_MODEL))
+			if(!MouseHitDetect(colliderBottle,worldSpaceTemp[i],DETECT_METHOD_MODEL))
 			{
 				isAlive[i] = false;
 				break;
@@ -2287,8 +2330,7 @@ void DrawBottle(bool isBlend)
 		{
 			if(isAlive[i] == true)
 			{
-				//DrawModelNonBlend(&modelBottle,worldSpaceTemp[i],viewSpace,false);
-				DrawModelNonBlendBottle(&modelBottle,worldSpaceTemp[i],viewSpace,false);
+				DrawModelNonBlend(&modelBottle,worldSpaceTemp[i],viewSpace,false);
 			}
 		}
 	}
