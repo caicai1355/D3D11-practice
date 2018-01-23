@@ -36,7 +36,7 @@
 #include <comdef.h>
 #endif
 
-#define SCREEN_SIZE 1
+#define SCREEN_SIZE 3
 #if SCREEN_SIZE == 1
 #define WIDTH 100
 #define HEIGHT 100 
@@ -1356,7 +1356,7 @@ bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoo
 
 void makeCollider(ModelData &sourceModelData,ModelColliderData &destColliderData)
 {
-	float maxX = FLT_MAX,minX = -FLT_MAX,maxY = FLT_MAX,minY = -FLT_MAX,maxZ = FLT_MAX,minZ = -FLT_MAX;
+	float maxX = -FLT_MAX,minX = FLT_MAX,maxY = -FLT_MAX,minY = FLT_MAX,maxZ = -FLT_MAX,minZ = FLT_MAX;
 	for(int i = 0,iLen = sourceModelData.indexVec.size();i < iLen;i++)
 	{
 		maxX = max(sourceModelData.vertexVec[sourceModelData.indexVec[i]].position.x,maxX);
@@ -1371,7 +1371,8 @@ void makeCollider(ModelData &sourceModelData,ModelColliderData &destColliderData
 	destColliderData.modelCentrePoint.f[1] = (maxY + minY)/2.0f;
 	destColliderData.modelCentrePoint.f[2] = (maxZ + minZ)/2.0f;
 	destColliderData.modelCentrePoint.f[3] = 1.0f;
-	destColliderData.centreRadius = XMVectorGetX(XMVector3Length(destColliderData.modelCentrePoint.v));
+	XMFLOAT3 radius = XMFLOAT3(maxX - minX,maxY - minY,maxZ - minZ);
+	destColliderData.centreRadius = XMVectorGetX(XMVector3Length(XMLoadFloat3(&radius)));
 	destColliderData.type = MODEL_COLLIDER;
 	
 	destColliderData.vertexVec.push_back(Vertex(XMFLOAT3(minX,maxY,minZ)));
@@ -2193,10 +2194,10 @@ bool MouseHitDetect(ModelData & modelData,CXMMATRIX worldSpaceTemp,int method = 
 		point3.v =  XMVector3TransformCoord(XMLoadFloat3(&(modelData.vertexVec[modelData.indexVec[i+2]].position)),worldSpaceTemp);
 		if(TriangleHitDetect(point1.f,point2.f,point3.f))
 		{
-			return false;
+			return true;
 		}
 	}
-	return true;
+	return false;
 }
 
 bool TriangleHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3)
@@ -2284,7 +2285,7 @@ bool TriangleHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3)
 	}
 }
 
-#define BOTTLE_NUM 20
+#define BOTTLE_NUM 1000
 void DrawBottle(bool isBlend)
 {
 	static XMMATRIX worldSpaceTemp[BOTTLE_NUM];
@@ -2305,11 +2306,10 @@ void DrawBottle(bool isBlend)
 	{	
 		for(int i = 0,iLen = BOTTLE_NUM;i < iLen;i++)
 		{
-			//if(!MouseHitDetect(modelBottle,worldSpaceTemp[i],DETECT_METHOD_MODEL))
-			if(!MouseHitDetect(colliderBottle,worldSpaceTemp[i],DETECT_METHOD_MODEL))
+			//if(MouseHitDetect(modelBottle,worldSpaceTemp[i],DETECT_METHOD_MODEL))
+			if(MouseHitDetect(colliderBottle,worldSpaceTemp[i],DETECT_METHOD_BOUNDING_MODEL_AND_SPHERE))
 			{
 				isAlive[i] = false;
-				break;
 			}
 		}
 	}
