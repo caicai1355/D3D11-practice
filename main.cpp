@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <vector>
+#include <algorithm>
 ///////////////**************dx_input**************////////////////////
 #include <D3D10_1.h>
 #include <DXGI.h>
@@ -36,7 +37,7 @@
 #include <comdef.h>
 #endif
 
-#define SCREEN_SIZE 3
+#define SCREEN_SIZE 1
 #if SCREEN_SIZE == 1
 #define WIDTH 100
 #define HEIGHT 100 
@@ -205,12 +206,24 @@ struct ModelData
 	std::vector<Vertex> vertexVec;	//生成的vertex序列
 	std::vector<DWORD> indexVec;	//vertMsgVec里面的vertex信息对应的index序列（其实也是最终的用来构造index的序列）
 	int type;
+	std::vector<DWORD> indexNoRepeat;
+	void makeIndexNoRepeat()
+	{
+		for(int i = 0,iLen = indexVec.size();i < iLen;i++)
+		{
+			if(std::find(indexNoRepeat.begin(),indexNoRepeat.end(),indexVec[i]) != indexNoRepeat.end())
+			{
+				indexNoRepeat.push_back(indexVec[i]);
+			}
+		}
+	}
 };
 
 struct ModelColliderData:public ModelData
 {
 	XMVECTORF32 modelCentrePoint;
 	float centreRadius;
+	//后面还可以加group来区分leg，arm等，还能加对应的权重比
 };
 
 HWND hwnd;
@@ -232,6 +245,7 @@ ID3D11Buffer* squareIndexBuffer;
 XMMATRIX worldSpace;
 XMMATRIX viewSpace;
 XMMATRIX projectionMatrix;
+XMMATRIX inverseViewSpace;
 ID3D11Buffer *constBufferSpace;
 ID3D11Buffer *constBufferLight;
 ID3D11Buffer *constBufferPointLight;
@@ -463,11 +477,12 @@ void DrawBottle(bool isBlend);
 
 #define DETECT_METHOD_MODEL 0
 #define DETECT_METHOD_BOUNDING_SPHERE 1
-#define DETECT_METHOD_BOUNDING_MODEL_AND_SPHERE 2
+#define DETECT_METHOD_MODEL_AND_BOUNDING_SPHERE 2
 void UpdateScene(double currentFrameTime);
 void GetRayCast();
 bool MouseHitDetect(ModelData & modelData,CXMMATRIX worldSpaceTemp,int method);
-bool TriangleHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3);
+bool ColliderDetect(ModelData & srcModel,ModelData & dstModel,CXMMATRIX srcWorldSpace,CXMMATRIX dstWorldSpace,int method);
+float TriangleHitDetect(XMFLOAT3 rayPointSrc,XMFLOAT3 rayPointDst,XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3);
 void DrawScene();
 
 LRESULT CALLBACK WinProc(HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam)
@@ -1307,6 +1322,7 @@ bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoo
 				}
 			}
 		}
+		modelData->makeIndexNoRepeat();
 
 		HRESULT hr;
 		D3D11_BUFFER_DESC vertexBufferDesc;
@@ -1371,9 +1387,11 @@ void makeCollider(ModelData &sourceModelData,ModelColliderData &destColliderData
 	destColliderData.modelCentrePoint.f[1] = (maxY + minY)/2.0f;
 	destColliderData.modelCentrePoint.f[2] = (maxZ + minZ)/2.0f;
 	destColliderData.modelCentrePoint.f[3] = 1.0f;
+
 	XMFLOAT3 radius = XMFLOAT3(maxX - minX,maxY - minY,maxZ - minZ);
 	destColliderData.centreRadius = XMVectorGetX(XMVector3Length(XMLoadFloat3(&radius)));
-	destColliderData.type = MODEL_COLLIDER;
+
+	//destColliderData.centreRadius = sqrt(pow(maxX - minX,2) + pow(maxY - minY,2) + pow(maxZ - minZ,2));
 	
 	destColliderData.vertexVec.push_back(Vertex(XMFLOAT3(minX,maxY,minZ)));
 	destColliderData.vertexVec.push_back(Vertex(XMFLOAT3(maxX,maxY,minZ)));
@@ -1408,6 +1426,8 @@ void makeCollider(ModelData &sourceModelData,ModelColliderData &destColliderData
 	{
 		destColliderData.indexVec.push_back(indexTemp[i]);
 	}
+	destColliderData.makeIndexNoRepeat();
+	destColliderData.type = MODEL_COLLIDER;
 }
 
 bool RenderPipeline()
@@ -2160,7 +2180,6 @@ void GetRayCast()
 	viewPoint.f[3] = 1.0f;
 
 	/*change into world space and produce two point*/
-	XMMATRIX inverseViewSpace;
 	XMVECTOR vectorTemp;
 	inverseViewSpace = XMMatrixInverse(&vectorTemp,viewSpace);
 	//rayPointEye.v = XMVector3TransformCoord(XMVectorZero(),inverseViewSpace);
@@ -2171,7 +2190,7 @@ void GetRayCast()
 bool MouseHitDetect(ModelData & modelData,CXMMATRIX worldSpaceTemp,int method = DETECT_METHOD_MODEL)
 {
 	XMVECTORF32 point1,point2,point3;
-	if(modelData.type == MODEL_COLLIDER && (method == DETECT_METHOD_BOUNDING_SPHERE || method == DETECT_METHOD_BOUNDING_MODEL_AND_SPHERE))
+	if(modelData.type == MODEL_COLLIDER && (method == DETECT_METHOD_BOUNDING_SPHERE || method == DETECT_METHOD_MODEL_AND_BOUNDING_SPHERE))
 	{
 		ModelColliderData &colliderDataTemp = ((ModelColliderData&)modelData);
 		float distance;
@@ -2192,7 +2211,7 @@ bool MouseHitDetect(ModelData & modelData,CXMMATRIX worldSpaceTemp,int method = 
 		point1.v =  XMVector3TransformCoord(XMLoadFloat3(&(modelData.vertexVec[modelData.indexVec[i]].position)),worldSpaceTemp);
 		point2.v =  XMVector3TransformCoord(XMLoadFloat3(&(modelData.vertexVec[modelData.indexVec[i+1]].position)),worldSpaceTemp);
 		point3.v =  XMVector3TransformCoord(XMLoadFloat3(&(modelData.vertexVec[modelData.indexVec[i+2]].position)),worldSpaceTemp);
-		if(TriangleHitDetect(point1.f,point2.f,point3.f))
+		if(TriangleHitDetect(rayPointEye.f,rayPointDir.f,point1.f,point2.f,point3.f) != FLT_MAX)
 		{
 			return true;
 		}
@@ -2200,7 +2219,101 @@ bool MouseHitDetect(ModelData & modelData,CXMMATRIX worldSpaceTemp,int method = 
 	return false;
 }
 
-bool TriangleHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3)
+bool ColliderDetect(ModelData & srcModel,ModelData & dstModel,CXMMATRIX srcWorldSpace,CXMMATRIX dstWorldSpace,int method = DETECT_METHOD_MODEL)	//have not statement
+{
+	if(method == DETECT_METHOD_MODEL_AND_BOUNDING_SPHERE || method == DETECT_METHOD_BOUNDING_SPHERE)
+	{
+		if(srcModel.type == MODEL_COLLIDER && dstModel.type == MODEL_COLLIDER)	//two centre's distance checking
+		{
+			ModelColliderData &srcCollider = (ModelColliderData&)srcModel;
+			ModelColliderData &dstCollider = (ModelColliderData&)dstModel;
+			if(XMVectorGetX(XMVector3Length(srcCollider.modelCentrePoint.v - dstCollider.modelCentrePoint.v)) <= srcCollider.centreRadius + dstCollider.centreRadius)
+			{
+				if(method == DETECT_METHOD_BOUNDING_SPHERE)
+				{
+					return true;
+				}
+			}
+			else
+			{
+				return false;
+			}
+		}
+		else if(srcModel.type == MODEL_COLLIDER || dstModel.type == MODEL_COLLIDER)	//one centre check one collider
+		{
+			XMVECTORF32 centrePoint;
+			float centreRadius;
+			ModelData *colliderData;
+			XMMATRIX worldPosition;
+			if(srcModel.type == MODEL_COLLIDER)
+			{
+				colliderData = &dstModel;
+				centrePoint = ((ModelColliderData&)srcModel).modelCentrePoint;
+				centreRadius = ((ModelColliderData&)srcModel).centreRadius;
+			}
+			else
+			{
+				colliderData = &srcModel;
+				centrePoint = ((ModelColliderData&)dstModel).modelCentrePoint;
+				centreRadius = ((ModelColliderData&)dstModel).centreRadius;
+			}
+			bool iFlag = false;
+			for(int i = 0,iLen = colliderData->indexNoRepeat.size();i < iLen;i++)
+			{
+				if(XMVectorGetX(XMVector3Length(XMVector3TransformCoord(XMLoadFloat3(&(colliderData->vertexVec[colliderData->indexNoRepeat[i]].position)),worldPosition)-centrePoint.v)) <= centreRadius)
+				{
+					if(method == DETECT_METHOD_BOUNDING_SPHERE)
+					{
+						return true;
+					}
+					else
+					{
+						iFlag = true;
+						break;
+					}
+				}
+			}
+			if(iFlag == false)
+			{
+				return false;
+			}
+		}
+	}
+	//model checking
+	XMVECTORF32 srcPoint1,srcPoint2,srcPoint3;
+	XMVECTORF32 dstPoint1,dstPoint2,dstPoint3;
+	float t;
+	for(int i = 0,iLen = srcModel.indexVec.size();i < iLen;i+=3)
+	{
+		srcPoint1.v = XMVector3TransformCoord(XMLoadFloat3(&(srcModel.vertexVec[srcModel.indexVec[i]].position)),dstWorldSpace);
+		srcPoint2.v = XMVector3TransformCoord(XMLoadFloat3(&(srcModel.vertexVec[srcModel.indexVec[i+1]].position)),dstWorldSpace);
+		srcPoint3.v = XMVector3TransformCoord(XMLoadFloat3(&(srcModel.vertexVec[srcModel.indexVec[i+2]].position)),dstWorldSpace);
+		for(int j = 0,jLen = dstModel.indexVec.size();j < iLen;j+=3)
+		{
+			dstPoint1.v = XMVector3TransformCoord(XMLoadFloat3(&(dstModel.vertexVec[dstModel.indexVec[j]].position)),srcWorldSpace);
+			dstPoint2.v = XMVector3TransformCoord(XMLoadFloat3(&(dstModel.vertexVec[dstModel.indexVec[j+1]].position)),srcWorldSpace);
+			dstPoint3.v = XMVector3TransformCoord(XMLoadFloat3(&(dstModel.vertexVec[dstModel.indexVec[j+2]].position)),srcWorldSpace);
+			t = TriangleHitDetect(srcPoint1.f,srcPoint2.f,dstPoint1.f,dstPoint2.f,dstPoint3.f);
+			if(0.0f <= t && t <= 1.0f)
+			{
+				return true;
+			}
+			t = TriangleHitDetect(srcPoint2.f,srcPoint3.f,dstPoint1.f,dstPoint2.f,dstPoint3.f);
+			if(0.0f <= t && t <= 1.0f)
+			{
+				return true;
+			}
+			t = TriangleHitDetect(srcPoint3.f,srcPoint1.f,dstPoint1.f,dstPoint2.f,dstPoint3.f);
+			if(0.0f <= t && t <= 1.0f)
+			{
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+float TriangleHitDetect(XMFLOAT3 rayPointSrc,XMFLOAT3 rayPointDst,XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3)
 {
 	//1
 	{
@@ -2223,12 +2336,12 @@ bool TriangleHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3)
 		planeParaB = planeNormal.f[1];
 		planeParaC = planeNormal.f[2];
 		planeParaD = -(planeParaA * point1.x + planeParaB * point1.y + planeParaC * point1.z);
-		distanceEye = planeParaA * rayPointEye.f[0] + planeParaB * rayPointEye.f[1] + planeParaC * rayPointEye.f[2] + planeParaD; 
-		distanceDir = planeParaA * rayPointDir.f[0] + planeParaB * rayPointDir.f[1] + planeParaC * rayPointDir.f[2] + planeParaD;
-		if(distanceEye == distanceDir)return false;
+		distanceEye = planeParaA * rayPointSrc.x + planeParaB * rayPointSrc.y + planeParaC * rayPointSrc.z + planeParaD; 
+		distanceDir = planeParaA * rayPointDst.x + planeParaB * rayPointDst.y + planeParaC * rayPointDst.z + planeParaD; 
+		if(distanceEye == distanceDir)return FLT_MAX;
 		t = distanceEye/(distanceEye - distanceDir);
-		if(t < 0.0f)return false;
-		pointEyeToPlane = rayPointEye.v + XMVectorScale(XMVectorSubtract(rayPointDir.v,rayPointEye.v),t);
+		if(t < 0.0f)return FLT_MAX;
+		pointEyeToPlane = XMLoadFloat3(&rayPointSrc) + XMVectorScale(XMVectorSubtract(XMLoadFloat3(&rayPointDst),XMLoadFloat3(&rayPointSrc)),t);
 
 		XMVECTOR lineSeg1,lineSeg2,lineSeg3;
 		XMVECTOR crossVec1,crossVec2,crossVec3;
@@ -2237,10 +2350,10 @@ bool TriangleHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3)
 		lineSeg3 = point3Vec - pointEyeToPlane;
 		crossVec1 = XMVector3Cross(lineSeg1,lineSeg2);
 		crossVec2 = XMVector3Cross(lineSeg2,lineSeg3);
-		if(XMVectorGetX(XMVector3Dot(crossVec1,crossVec2)) <= 0.0f)return false;
+		if(XMVectorGetX(XMVector3Dot(crossVec1,crossVec2)) <= 0.0f)return FLT_MAX;
 		crossVec3 = XMVector3Cross(lineSeg3,lineSeg1);
-		if(XMVectorGetX(XMVector3Dot(crossVec2,crossVec3)) <= 0.0f)return false;
-		return true;
+		if(XMVectorGetX(XMVector3Dot(crossVec2,crossVec3)) <= 0.0f)return FLT_MAX;
+		return t;
 	}
 
 	//2
@@ -2286,7 +2399,7 @@ bool TriangleHitDetect(XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3)
 }
 
 #define BOTTLE_NUM 1000
-void DrawBottle(bool isBlend)
+void DrawBottle(bool isBlend)	//bottles' controlling,condition checking and drawing
 {
 	static XMMATRIX worldSpaceTemp[BOTTLE_NUM];
 	static bool isAlive[BOTTLE_NUM];
@@ -2301,15 +2414,32 @@ void DrawBottle(bool isBlend)
 		worldSpaceTemp[0] = XMMatrixTranslation(-2.0f,2.0f,0.0f);
 		firstCall = false;
 	}
-	
+	worldSpaceTemp[1] = XMMatrixTranslation(0.0f,0.0f,3.0f) * inverseViewSpace;
+
 	if(isMouseClicked)
 	{	
 		for(int i = 0,iLen = BOTTLE_NUM;i < iLen;i++)
 		{
 			//if(MouseHitDetect(modelBottle,worldSpaceTemp[i],DETECT_METHOD_MODEL))
-			if(MouseHitDetect(colliderBottle,worldSpaceTemp[i],DETECT_METHOD_BOUNDING_MODEL_AND_SPHERE))
+			if(MouseHitDetect(colliderBottle,worldSpaceTemp[i],DETECT_METHOD_MODEL_AND_BOUNDING_SPHERE))
 			{
 				isAlive[i] = false;
+			}
+			//remember that i have not do the depth filter of bottles
+		}
+	}
+
+	//query:I have a problem,all the different checking calculates the same world position,is this repeititon unnecessary?
+	if(isAlive[1] == true)
+	{
+		for(int i = 0,len = BOTTLE_NUM;i < len;i++)
+		{
+			if(i != 1 && isAlive[i] == true)
+			{
+				if(ColliderDetect(colliderBottle,colliderBottle,worldSpaceTemp[1],worldSpaceTemp[i],DETECT_METHOD_MODEL_AND_BOUNDING_SPHERE))
+				{
+					isAlive[1] = false;
+				}
 			}
 		}
 	}
