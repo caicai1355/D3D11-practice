@@ -2227,7 +2227,7 @@ bool ColliderDetect(ModelData & srcModel,ModelData & dstModel,CXMMATRIX srcWorld
 		{
 			ModelColliderData &srcCollider = (ModelColliderData&)srcModel;
 			ModelColliderData &dstCollider = (ModelColliderData&)dstModel;
-			if(XMVectorGetX(XMVector3Length(srcCollider.modelCentrePoint.v - dstCollider.modelCentrePoint.v)) <= srcCollider.centreRadius + dstCollider.centreRadius)
+			if(XMVectorGetX(XMVector3Length(XMVector3TransformCoord(srcCollider.modelCentrePoint.v,srcWorldSpace) - XMVector3TransformCoord(dstCollider.modelCentrePoint.v,dstWorldSpace))) <= srcCollider.centreRadius + dstCollider.centreRadius)
 			{
 				if(method == DETECT_METHOD_BOUNDING_SPHERE)
 				{
@@ -2416,7 +2416,7 @@ void DrawBottle(bool isBlend)	//bottles' controlling,condition checking and draw
 	}
 	worldSpaceTemp[1] = XMMatrixTranslation(0.0f,0.0f,3.0f) * inverseViewSpace;
 
-	if(isMouseClicked)
+	if(false)
 	{	
 		for(int i = 0,iLen = BOTTLE_NUM;i < iLen;i++)
 		{
@@ -2430,7 +2430,7 @@ void DrawBottle(bool isBlend)	//bottles' controlling,condition checking and draw
 	}
 
 	//query:I have a problem,all the different checking calculates the same world position,is this repeititon unnecessary?
-	if(isAlive[1] == true)
+	if(isAlive[1] == true && isMouseClicked)
 	{
 		for(int i = 0,len = BOTTLE_NUM;i < len;i++)
 		{
