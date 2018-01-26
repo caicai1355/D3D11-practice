@@ -37,6 +37,13 @@
 #include <comdef.h>
 #endif
 
+/*
+the portion that can be improved
+1.don't forget the LoadObjModel() function still can't load the polygon more than 3 sides
+2.set the article struct that be used for store model data,collider data,world space,world position after calculated and so on,because world position would calculated repeatedly
+3.collider should be a individual struct,can't be the derived class of the modeldata struct,if some article intends to detect collider,it must have a collider struct
+*/
+
 #define SCREEN_SIZE 1
 #if SCREEN_SIZE == 1
 #define WIDTH 100
@@ -136,7 +143,11 @@ struct MaterialMsg	//.mtl文件的mtl数据
 
 struct Vertex
 {
-	Vertex(XMFLOAT3 pos = XMFLOAT3(),XMFLOAT2 texCoord = XMFLOAT2(),XMFLOAT3 nor = XMFLOAT3(),XMFLOAT3 tng = XMFLOAT3()):position(pos),textureCoordinate(texCoord),normal(nor),tangent(tng)
+	Vertex(XMFLOAT3 pos = XMFLOAT3(),XMFLOAT2 texCoord = XMFLOAT2(),XMFLOAT3 nor = XMFLOAT3(),XMFLOAT3 tng = XMFLOAT3()):
+		position(pos),
+		textureCoordinate(texCoord),
+		normal(nor),
+		tangent(tng)
 	{}
 	XMFLOAT3 position;
 	XMFLOAT2 textureCoordinate;
@@ -202,7 +213,7 @@ struct ModelData
 	}
 	ID3D11Buffer *modelVertexBuffer;
 	ID3D11Buffer *modelIndexBuffer;
-	std::vector<SurfaceMaterial> modelSurMetVec;
+	std::vector<SurfaceMaterial> modelSurMetVec;	//group信息
 	std::vector<Vertex> vertexVec;	//生成的vertex序列
 	std::vector<DWORD> indexVec;	//vertMsgVec里面的vertex信息对应的index序列（其实也是最终的用来构造index的序列）
 	int type;
@@ -224,6 +235,24 @@ struct ModelColliderData:public ModelData
 	XMVECTORF32 modelCentrePoint;
 	float centreRadius;
 	//后面还可以加group来区分leg，arm等，还能加对应的权重比
+};
+
+struct MD5meshJointData
+{
+	std::wstring name;
+	int parentIndex;
+	XMFLOAT3 jointPos;
+	XMFLOAT3 jointQuat;
+};
+
+struct MD5meshMeshData
+{
+};
+
+struct MD5meshData
+{
+	std::vector<MD5meshJointData> jointList;
+	std::vector<MD5meshMeshData> meshList;
 };
 
 HWND hwnd;
@@ -2219,7 +2248,7 @@ bool MouseHitDetect(ModelData & modelData,CXMMATRIX worldSpaceTemp,int method = 
 	return false;
 }
 
-bool ColliderDetect(ModelData & srcModel,ModelData & dstModel,CXMMATRIX srcWorldSpace,CXMMATRIX dstWorldSpace,int method = DETECT_METHOD_MODEL)	//have not statement
+bool ColliderDetect(ModelData & srcModel,ModelData & dstModel,CXMMATRIX srcWorldSpace,CXMMATRIX dstWorldSpace,int method = DETECT_METHOD_MODEL)
 {
 	if(method == DETECT_METHOD_MODEL_AND_BOUNDING_SPHERE || method == DETECT_METHOD_BOUNDING_SPHERE)
 	{
@@ -2438,7 +2467,7 @@ void DrawBottle(bool isBlend)	//bottles' controlling,condition checking and draw
 			{
 				if(ColliderDetect(colliderBottle,colliderBottle,worldSpaceTemp[1],worldSpaceTemp[i],DETECT_METHOD_MODEL_AND_BOUNDING_SPHERE))
 				{
-					isAlive[1] = false;
+					//isAlive[1] = false;
 				}
 			}
 		}
