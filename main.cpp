@@ -153,6 +153,8 @@ struct Vertex
 	XMFLOAT2 textureCoordinate;
 	XMFLOAT3 normal;
 	XMFLOAT3 tangent;
+	int weightStart;
+	int weightNum;
 };
 struct ConstSpace
 {
@@ -242,11 +244,25 @@ struct MD5meshJointData
 	std::wstring name;
 	int parentIndex;
 	XMFLOAT3 jointPos;
-	XMFLOAT3 jointQuat;
+	XMFLOAT4 jointQuat;
+};
+
+struct MD5meshWeightData
+{
+	int jointIndex;
+	float weightValue;
+	XMFLOAT3 position;
 };
 
 struct MD5meshMeshData
 {
+	std::wstring shaderName;
+	int numverts;
+	int numtris;	//the number of triangle,it's one third the number of index
+	int numweights;
+	std::vector<Vertex> vertexData;
+	std::vector<DWORD> indexData;
+	std::vector<MD5meshWeightData> weightData;
 };
 
 struct MD5meshData
@@ -336,6 +352,7 @@ struct ModelData modelHouse;
 struct ModelData modelGround;
 struct ModelData modelBottle;
 struct ModelColliderData colliderBottle;
+struct MD5meshData md5Boy;
 
 //raycast(world space)
 XMVECTORF32 rayPointEye;
@@ -498,6 +515,7 @@ void DetectInput(double time);
 void SkyBoxInit();
 
 bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoord,bool isCalcNormal);
+bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isRHCoord,bool isCalcNormal);
 void makeCollider(ModelData &sourceModelData,ModelColliderData &destColliderData);
 void DrawModelNonBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);
 void DrawModelBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);
@@ -1399,6 +1417,173 @@ bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoo
 	}
 }
 
+
+bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isRHCoord,bool isCalcNormal)
+{
+	std::wifstream md5File(filename);
+
+	if(md5File)
+	{
+		std::wstring keyString;
+		std::wstring commandline;
+		wchar_t keyChar;
+		int MD5Version;
+		int numJoints;
+		int numMeshes;
+		MD5meshJointData jointTemp;
+		MD5meshMeshData meshTemp;
+		MD5meshWeightData weightTemp;
+		Vertex vertexTemp;
+		DWORD triIndexA,triIndexB,triIndexC;
+		float floatNumTemp;
+		while(md5File)
+		{
+			md5File >> keyString;
+			if(keyString == L"MD5Version")
+			{
+				md5File >> MD5Version;
+			}
+			else if(keyString == L"commandline")
+			{
+				while(md5File.get() != '"');
+				keyString = L"";
+				while((keyChar = md5File.get()) != '"')
+				{
+					keyString += keyChar;
+				}
+				commandline = keyString;
+			}
+			else if(keyString == L"numJoints")
+			{
+				md5File >> numJoints;
+			}
+			else if(keyString == L"numMeshes")
+			{
+				md5File >> numMeshes;
+			}
+			else if(keyString == L"joints")
+			{
+				md5File >> keyString;	//skip the "{"
+				//query:Is it possible to have an annotated '//' symbol?	it is a possibility to map the '"' character in annotated if it has the annotate
+				for(int i = 0;i < numJoints;i++)
+				{
+					while(md5File.get() != '"');
+					keyString = L"";
+					while((keyChar = md5File.get()) != '"')
+					{
+						keyString += keyChar;
+					}
+					jointTemp.name = keyString;
+					md5File >> jointTemp.parentIndex;
+					md5File >> keyString;	//skip the "("
+					md5File >> jointTemp.jointPos.x >> jointTemp.jointPos.y >> jointTemp.jointPos.z;
+					if(isRHCoord)
+					{
+						jointTemp.jointPos.z *= -1;
+					}
+					md5File >> keyString >> keyString;	//skip the "£©" and "("
+					md5File >> jointTemp.jointQuat.x >> jointTemp.jointQuat.y >> jointTemp.jointQuat.z;
+					//calculate the 'w' of quaternion
+					floatNumTemp = 1 - jointTemp.jointQuat.x * jointTemp.jointQuat.x + jointTemp.jointQuat.y * jointTemp.jointQuat.y + jointTemp.jointQuat.z * jointTemp.jointQuat.z;
+					if(floatNumTemp <= 0.0f)
+					{
+						jointTemp.jointQuat.w = 0.0f;
+					}
+					else
+					{
+						jointTemp.jointQuat.w = sqrt(floatNumTemp);
+					}
+					if(isRHCoord)
+					{
+						//??? how to calculate the quanternion in rh coordinate?
+					}
+					md5File >> keyString;	//skip the ")"
+					std::getline(md5File,keyString);	//pass this line
+				}
+				md5File >> keyString;	//skip the "}"
+				md5meshData->jointList.push_back(jointTemp);
+			}
+			else if(keyString == L"mesh")
+			{
+				md5File >> keyString;	//skip the "{"
+				while(md5File >> keyString && keyString != L"}")
+				{
+					if(keyString == L"shader")
+					{
+						while(md5File.get() != '"');
+						keyString = L"";
+						while((keyChar = md5File.get()) != '"')
+						{
+							keyString += keyChar;
+						}
+						meshTemp.shaderName = keyString;
+					}
+					else if(keyString == L"numverts")
+					{
+						md5File >> meshTemp.numverts;
+						meshTemp.vertexData.clear();
+						for(int i = 0;i < meshTemp.numverts;i++)
+						{
+							md5File >> keyString >> keyString;	//skip the "vert" and "0"
+							md5File >> keyString;	//skip the "("
+							md5File >> vertexTemp.textureCoordinate.x >> vertexTemp.textureCoordinate.y;
+							if(isRHCoord)
+							{
+								vertexTemp.textureCoordinate.y = 1.0f - vertexTemp.textureCoordinate.y;
+							}
+							md5File >> keyString;	//skip the ")"
+							md5File >> vertexTemp.weightStart >> vertexTemp.weightNum;
+							meshTemp.vertexData.push_back(vertexTemp);
+						}
+					}
+					else if(keyString == L"numtris")
+					{
+						md5File >> meshTemp.numtris;
+						meshTemp.indexData.clear();
+						for(int i = 0;i < meshTemp.numtris;i++)
+						{
+							md5File >> keyString >> keyString;	//skip the "tri" and "0"
+							md5File >> triIndexA >> triIndexB >> triIndexC;
+							meshTemp.indexData.push_back(triIndexA);
+							meshTemp.indexData.push_back(triIndexB);
+							meshTemp.indexData.push_back(triIndexC);
+						}
+					}
+					else if(keyString == L"numweights")
+					{
+						md5File >> meshTemp.numweights;
+						meshTemp.weightData.clear();
+						for(int i = 0;i < meshTemp.numweights;i++)
+						{
+							md5File >> keyString >> keyString;	//skip the "weight" and "0"
+							md5File >> weightTemp.jointIndex;
+							md5File >> weightTemp.weightValue;
+							md5File >> keyString;	//skip the "("
+							md5File >> weightTemp.position.x >> weightTemp.position.y >> weightTemp.position.z;
+							md5File >> keyString;	//skip the ")"
+							meshTemp.weightData.push_back(weightTemp);
+						}
+					}
+					else
+					{
+						std::getline(md5File,keyString);
+					}
+				}
+				md5meshData->meshList.push_back(meshTemp);
+			}
+		}
+		return true;
+	}
+	else
+	{
+		std::wstring errorString = L"open \"";
+		errorString += filename;
+		errorString += L"\" error!";
+		MessageBox(hwnd,errorString.c_str(),L"error",MB_OK);
+		return false;
+	}
+}
+
 void makeCollider(ModelData &sourceModelData,ModelColliderData &destColliderData)
 {
 	float maxX = -FLT_MAX,minX = FLT_MAX,maxY = -FLT_MAX,minY = FLT_MAX,maxZ = -FLT_MAX,minZ = FLT_MAX;
@@ -1833,7 +2018,8 @@ int CALLBACK WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine
 {
 	WindowInit(hInstance);
 	DirectxInit();
-	
+
+	LoadMD5Model(L"boy.md5mesh",&md5Boy,false,false);	
 	LoadObjModel(L"spaceCompound.obj",&modelHouse,true,false);
 	LoadObjModel(L"ground.obj",&modelGround,true,false);
 	LoadObjModel(L"bottle.obj",&modelBottle,true,true);
