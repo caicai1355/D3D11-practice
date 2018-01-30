@@ -260,9 +260,12 @@ struct MD5meshMeshData
 	int numverts;
 	int numtris;	//the number of triangle,it's one third the number of index
 	int numweights;
+	ID3D11Buffer *md5meshVertexBuffer;
+	ID3D11Buffer *md5meshIndexBuffer;
 	std::vector<Vertex> vertexData;
 	std::vector<DWORD> indexData;
 	std::vector<MD5meshWeightData> weightData;
+	ID3D11ShaderResourceView * shaderResourceView;
 };
 
 struct MD5meshData
@@ -1491,7 +1494,7 @@ bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isR
 					}
 					else
 					{
-						jointTemp.jointQuat.w = sqrt(floatNumTemp);
+						jointTemp.jointQuat.w = -sqrtf(floatNumTemp);	//query:why does it multiply the -1?
 					}
 					if(isRHCoord)
 					{
@@ -1517,6 +1520,10 @@ bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isR
 							keyString += keyChar;
 						}
 						meshTemp.shaderName = keyString;
+						if(!FAILED(D3DX11CreateShaderResourceViewFromFile(d3dDevice,keyString.c_str(),NULL,NULL,&(meshTemp.shaderResourceView),NULL)))
+						{
+							meshTemp.shaderResourceView = NULL;
+						}
 					}
 					else if(keyString == L"numverts")
 					{
@@ -1569,6 +1576,42 @@ bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isR
 						std::getline(md5File,keyString);
 					}
 				}
+				for(int i = 0,iLen = meshTemp.numverts;i < iLen;i++)
+				{
+					meshTemp.vertexData[i]
+				}
+				HRESULT hr;
+				D3D11_BUFFER_DESC vertexBufferDesc;
+				D3D11_SUBRESOURCE_DATA vertexData;
+
+				vertexBufferDesc.ByteWidth = sizeof(Vertex) * meshTemp.vertexData.size();
+				vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+				vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+				vertexBufferDesc.CPUAccessFlags = 0;
+				vertexBufferDesc.MiscFlags = 0;
+				vertexBufferDesc.StructureByteStride = 0;
+				vertexData.pSysMem = &(meshTemp.vertexData[0]);
+				vertexData.SysMemPitch = 0;
+				vertexData.SysMemSlicePitch = 0;
+
+				hr = d3dDevice->CreateBuffer(&vertexBufferDesc,&vertexData,&(meshTemp.md5meshVertexBuffer));
+				HR(hr);
+
+				D3D11_BUFFER_DESC indexBufferDesc;
+				D3D11_SUBRESOURCE_DATA indexData;
+
+				indexBufferDesc.ByteWidth = sizeof(DWORD) * meshTemp.indexData.size();
+				indexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+				indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+				indexBufferDesc.CPUAccessFlags = 0;
+				indexBufferDesc.MiscFlags = 0;
+				indexBufferDesc.StructureByteStride = 0;
+				indexData.pSysMem = &(meshTemp.indexData[0]);
+				indexData.SysMemPitch = 0;
+				indexData.SysMemSlicePitch = 0;
+
+				hr = d3dDevice->CreateBuffer(&indexBufferDesc,&indexData,&(meshTemp.md5meshIndexBuffer));
+				HR(hr);
 				md5meshData->meshList.push_back(meshTemp);
 			}
 		}
@@ -1605,7 +1648,7 @@ void makeCollider(ModelData &sourceModelData,ModelColliderData &destColliderData
 	XMFLOAT3 radius = XMFLOAT3(maxX - minX,maxY - minY,maxZ - minZ);
 	destColliderData.centreRadius = XMVectorGetX(XMVector3Length(XMLoadFloat3(&radius)));
 
-	//destColliderData.centreRadius = sqrt(pow(maxX - minX,2) + pow(maxY - minY,2) + pow(maxZ - minZ,2));
+	//destColliderData.centreRadius = sqrtf(pow(maxX - minX,2) + pow(maxY - minY,2) + pow(maxZ - minZ,2));
 	
 	destColliderData.vertexVec.push_back(Vertex(XMFLOAT3(minX,maxY,minZ)));
 	destColliderData.vertexVec.push_back(Vertex(XMFLOAT3(maxX,maxY,minZ)));
@@ -1762,7 +1805,7 @@ bool RenderPipeline()
 	viewSpace = XMMatrixLookAtLH(eyePos,focusPos,upPos);
 	cameraDir.v = focusPos.v - eyePos.v;
 	cameraRotHorizontal = atan2(cameraDir.f[2],cameraDir.f[0]);
-	cameraRotVertical= atan2(cameraDir.f[1],sqrt(cameraDir.f[2] * cameraDir.f[2] + cameraDir.f[0] * cameraDir.f[0]));
+	cameraRotVertical= atan2(cameraDir.f[1],sqrtf(cameraDir.f[2] * cameraDir.f[2] + cameraDir.f[0] * cameraDir.f[0]));
 
 	//Æ½ÐÐ¹â
 	constBufferDesc.ByteWidth = sizeof(ConstLight);
@@ -2292,6 +2335,39 @@ void DrawModelBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX v
 			d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
 			d3dDeviceContext->DrawIndexed(indexCount,indexStart,0);
 		}
+	}
+}
+
+void DrawMD5mesh(struct MD5meshData *md5meshData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias)
+{
+	UINT stride = sizeof(Vertex);
+	UINT offset = 0;
+	constSpace.WVP = XMMatrixTranspose(worldSpace * viewSpace * projectionMatrix);
+	constSpace.worldSpace = XMMatrixTranspose(worldSpace);
+	if(isBias)
+		d3dDeviceContext->RSSetState(rasterState_cwnc_bias);
+	else
+		d3dDeviceContext->RSSetState(rasterState_cwnc);
+	d3dDeviceContext->PSSetShader(PS,0,0);
+	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
+	d3dDeviceContext->OMSetBlendState(blendState,0,0xffffffff);
+	d3dDeviceContext->VSSetShader(VS,0,0);
+	for(int i = 0,iLen = md5meshData->meshList.size();i < iLen;i++)
+	{
+		d3dDeviceContext->IASetVertexBuffers(0,1,&(md5meshData->meshList[i].md5meshVertexBuffer),&stride,&offset);
+		d3dDeviceContext->IASetIndexBuffer(md5meshData->meshList[i].md5meshIndexBuffer,DXGI_FORMAT_R32_UINT,0);
+		if(md5meshData->meshList[i].shaderResourceView != NULL)
+		{
+			constSpace.hasTexture = TRUE;
+		}
+		else
+		{
+			constSpace.difColor = XMFLOAT4(0.0f,0.0f,0.0f,0.0f);
+			constSpace.hasTexture = FALSE;
+		}
+		constSpace.hasNormalMap = FALSE;
+		d3dDeviceContext->UpdateSubresource(constBufferSpace,0,NULL,&constSpace,0,0);
+		d3dDeviceContext->DrawIndexed(md5meshData->meshList[i].numtris * 3,0,0);
 	}
 }
 
