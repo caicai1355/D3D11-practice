@@ -44,7 +44,7 @@ the portion that can be improved
 3.collider should be a individual struct,can't be the derived class of the modeldata struct,if some article intends to detect collider,it must have a collider struct
 */
 
-#define SCREEN_SIZE 1
+#define SCREEN_SIZE 2
 #if SCREEN_SIZE == 1
 #define WIDTH 100
 #define HEIGHT 100 
@@ -356,8 +356,8 @@ struct ModelData modelGround;
 struct ModelData modelBottle;
 struct ModelColliderData colliderBottle;
 struct MD5meshData md5Boy;
-XMMATRIX scaleBoy = XMMatrixScaling( 0.04f, 0.04f, 0.04f );			// The model is a bit too large for our scene, so make it smaller
-XMMATRIX translationBoy = XMMatrixTranslation( 0.0f, 3.0f, 0.0f );
+XMMATRIX scaleBoy = XMMatrixScaling( 0.01f, 0.01f, 0.01f );			// The model is a bit too large for our scene, so make it smaller
+XMMATRIX translationBoy = XMMatrixTranslation( -2.0f, 3.0f, -2.0f );
 
 //raycast(world space)
 XMVECTORF32 rayPointEye;
@@ -1484,13 +1484,13 @@ bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isR
 					jointTemp.name = keyString;
 					md5File >> jointTemp.parentIndex;
 					md5File >> keyString;	//skip the "("
-					md5File >> jointTemp.jointPos.x >> jointTemp.jointPos.y >> jointTemp.jointPos.z;
+					md5File >> jointTemp.jointPos.x >> jointTemp.jointPos.z >> jointTemp.jointPos.y;
 					if(isRHCoord)
 					{
 						jointTemp.jointPos.z *= -1;
 					}
 					md5File >> keyString >> keyString;	//skip the "£©" and "("
-					md5File >> jointTemp.jointQuat.x >> jointTemp.jointQuat.y >> jointTemp.jointQuat.z;
+					md5File >> jointTemp.jointQuat.x >> jointTemp.jointQuat.z >> jointTemp.jointQuat.y;
 					//calculate the 'w' of quaternion
 					floatNumTemp = 1.0f - jointTemp.jointQuat.x * jointTemp.jointQuat.x - jointTemp.jointQuat.y * jointTemp.jointQuat.y - jointTemp.jointQuat.z * jointTemp.jointQuat.z;
 					if(floatNumTemp <= 0.0f)
@@ -1571,7 +1571,7 @@ bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isR
 							md5File >> weightTemp.jointIndex;
 							md5File >> weightTemp.weightValue;
 							md5File >> keyString;	//skip the "("
-							md5File >> weightTemp.position.x >> weightTemp.position.y >> weightTemp.position.z;
+							md5File >> weightTemp.position.x >> weightTemp.position.z >> weightTemp.position.y;
 							md5File >> keyString;	//skip the ")"
 							meshTemp.weightData.push_back(weightTemp);
 						}
@@ -2414,6 +2414,7 @@ void DrawMD5mesh(struct MD5meshData *md5meshData,CXMMATRIX worldSpace,CXMMATRIX 
 		if(md5meshData->meshList[i].shaderResourceView != NULL)
 		{
 			constSpace.hasTexture = TRUE;
+			d3dDeviceContext->PSSetShaderResources(0,1,&(md5meshData->meshList[i].shaderResourceView));
 		}
 		else
 		{
