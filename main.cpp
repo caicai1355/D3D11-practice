@@ -356,6 +356,8 @@ struct ModelData modelGround;
 struct ModelData modelBottle;
 struct ModelColliderData colliderBottle;
 struct MD5meshData md5Boy;
+XMMATRIX scaleBoy = XMMatrixScaling( 0.04f, 0.04f, 0.04f );			// The model is a bit too large for our scene, so make it smaller
+XMMATRIX translationBoy = XMMatrixTranslation( 0.0f, 3.0f, 0.0f );
 
 //raycast(world space)
 XMVECTORF32 rayPointEye;
@@ -520,8 +522,9 @@ void SkyBoxInit();
 bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoord,bool isCalcNormal);
 bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isRHCoord,bool isCalcNormal);
 void makeCollider(ModelData &sourceModelData,ModelColliderData &destColliderData);
-void DrawModelNonBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);
-void DrawModelBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);
+void DrawModelNonBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);	//isBias was set to true when ModelData might be covered
+void DrawModelBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);	//isBias was set to true when ModelData might be covered
+void DrawMD5mesh(struct MD5meshData *md5meshData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);	//isBias was set to true when MD5meshData might be covered
 
 void DrawBottle(bool isBlend);
 
@@ -1263,7 +1266,7 @@ bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoo
 			modelData->vertexVec.push_back(vertexTemp);
 		}
 		
-		//calculate the normal(smooth surface)
+		//calculate the normal(smooth vertex)
 		if(isCalcNormal)
 		{
 			std::vector<XMFLOAT3> faceNormal;
@@ -1421,7 +1424,7 @@ bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoo
 }
 
 
-bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isRHCoord,bool isCalcNormal)
+bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isRHCoord,bool isCalcNormal = true)
 {
 	std::wifstream md5File(filename);
 
@@ -1439,6 +1442,8 @@ bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isR
 		Vertex vertexTemp;
 		DWORD triIndexA,triIndexB,triIndexC;
 		float floatNumTemp;
+		XMVECTOR quanternionTemp;
+		XMVECTOR vectorTemp;
 		while(md5File)
 		{
 			md5File >> keyString;
@@ -1487,14 +1492,14 @@ bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isR
 					md5File >> keyString >> keyString;	//skip the "）" and "("
 					md5File >> jointTemp.jointQuat.x >> jointTemp.jointQuat.y >> jointTemp.jointQuat.z;
 					//calculate the 'w' of quaternion
-					floatNumTemp = 1 - jointTemp.jointQuat.x * jointTemp.jointQuat.x + jointTemp.jointQuat.y * jointTemp.jointQuat.y + jointTemp.jointQuat.z * jointTemp.jointQuat.z;
+					floatNumTemp = 1.0f - jointTemp.jointQuat.x * jointTemp.jointQuat.x - jointTemp.jointQuat.y * jointTemp.jointQuat.y - jointTemp.jointQuat.z * jointTemp.jointQuat.z;
 					if(floatNumTemp <= 0.0f)
 					{
 						jointTemp.jointQuat.w = 0.0f;
 					}
 					else
 					{
-						jointTemp.jointQuat.w = -sqrtf(floatNumTemp);	//query:why does it multiply the -1?
+						jointTemp.jointQuat.w = -sqrtf(floatNumTemp);	//query:why does it multiply the -1? answer:the manual said...
 					}
 					if(isRHCoord)
 					{
@@ -1502,9 +1507,9 @@ bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isR
 					}
 					md5File >> keyString;	//skip the ")"
 					std::getline(md5File,keyString);	//pass this line
+					md5meshData->jointList.push_back(jointTemp);
 				}
-				md5File >> keyString;	//skip the "}"
-				md5meshData->jointList.push_back(jointTemp);
+				while(md5File.get() != '}');	//skip the "}"
 			}
 			else if(keyString == L"mesh")
 			{
@@ -1520,7 +1525,7 @@ bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isR
 							keyString += keyChar;
 						}
 						meshTemp.shaderName = keyString;
-						if(!FAILED(D3DX11CreateShaderResourceViewFromFile(d3dDevice,keyString.c_str(),NULL,NULL,&(meshTemp.shaderResourceView),NULL)))
+						if(FAILED(D3DX11CreateShaderResourceViewFromFile(d3dDevice,keyString.c_str(),NULL,NULL,&(meshTemp.shaderResourceView),NULL)))
 						{
 							meshTemp.shaderResourceView = NULL;
 						}
@@ -1576,9 +1581,58 @@ bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isR
 						std::getline(md5File,keyString);
 					}
 				}
-				for(int i = 0,iLen = meshTemp.numverts;i < iLen;i++)
+				for(int i = 0,iLen = meshTemp.numverts;i < iLen;i++)	//calculate the vertex position
 				{
-					meshTemp.vertexData[i]
+					meshTemp.vertexData[i].position = XMFLOAT3(0.0f,0.0f,0.0f);
+					for(int j = meshTemp.vertexData[i].weightStart,jLen = meshTemp.vertexData[i].weightStart + meshTemp.vertexData[i].weightNum;j < jLen;j++)
+					{
+						quanternionTemp = XMLoadFloat4(&(md5meshData->jointList[meshTemp.weightData[j].jointIndex].jointQuat));
+						//vectorTemp = XMQuaternionMultiply(XMQuaternionMultiply(quanternionTemp,XMLoadFloat3(&(meshTemp.weightData[j].position))),XMQuaternionConjugate(quanternionTemp));
+						vectorTemp = XMQuaternionMultiply(quanternionTemp,XMLoadFloat3(&(meshTemp.weightData[j].position)));
+						vectorTemp = XMQuaternionMultiply(vectorTemp,XMQuaternionConjugate(quanternionTemp));
+						meshTemp.vertexData[i].position.x += (md5meshData->jointList[meshTemp.weightData[j].jointIndex].jointPos.x + XMVectorGetX(vectorTemp)) * meshTemp.weightData[j].weightValue;
+						meshTemp.vertexData[i].position.y += (md5meshData->jointList[meshTemp.weightData[j].jointIndex].jointPos.y + XMVectorGetY(vectorTemp)) * meshTemp.weightData[j].weightValue;
+						meshTemp.vertexData[i].position.z += (md5meshData->jointList[meshTemp.weightData[j].jointIndex].jointPos.z + XMVectorGetZ(vectorTemp)) * meshTemp.weightData[j].weightValue;
+					}
+				}
+				if(isCalcNormal)	//calculate the normal direction
+				{
+					std::vector<XMFLOAT3> faceNormal;
+					XMFLOAT3 normalTemp;
+					for(int i = 0,iLen = meshTemp.indexData.size();i < iLen;i+=3)
+					{
+						normalTemp.x = (meshTemp.vertexData[meshTemp.indexData[i]].normal.x + meshTemp.vertexData[meshTemp.indexData[i+1]].normal.x + meshTemp.vertexData[meshTemp.indexData[i+2]].normal.x)/3;
+						normalTemp.y = (meshTemp.vertexData[meshTemp.indexData[i]].normal.y + meshTemp.vertexData[meshTemp.indexData[i+1]].normal.y + meshTemp.vertexData[meshTemp.indexData[i+2]].normal.y)/3;
+						normalTemp.z = (meshTemp.vertexData[meshTemp.indexData[i]].normal.z + meshTemp.vertexData[meshTemp.indexData[i+1]].normal.z + meshTemp.vertexData[meshTemp.indexData[i+2]].normal.z)/3;
+						faceNormal.push_back(normalTemp);
+					}
+					int joinFaceNum;
+					for(int i = 0,iLen = meshTemp.vertexData.size();i < iLen;i++)
+					{
+						joinFaceNum = 0;
+						normalTemp = XMFLOAT3(0.0f,0.0f,0.0f);
+						for(int j = 0,k = 0,jLen = faceNormal.size();j < jLen;j++)
+						{
+							if(meshTemp.indexData[j*3] == i || meshTemp.indexData[j*3+1] == i || meshTemp.indexData[j*3+2] == i)
+							{
+								joinFaceNum++;
+								normalTemp.x += faceNormal[j].x;
+								normalTemp.y += faceNormal[j].y;
+								normalTemp.z += faceNormal[j].z;
+							}
+						}
+						if(joinFaceNum > 0)
+						{
+							normalTemp.x /= joinFaceNum;
+							normalTemp.y /= joinFaceNum;
+							normalTemp.z /= joinFaceNum;
+							meshTemp.vertexData[i].normal = normalTemp;
+						}
+						else
+						{
+							meshTemp.vertexData[i].normal = meshTemp.vertexData[i].position;
+						}
+					}
 				}
 				HRESULT hr;
 				D3D11_BUFFER_DESC vertexBufferDesc;
@@ -2173,9 +2227,10 @@ void DrawScene()
 	DrawSkyBox();
 	
 //画模型不透明部分
-	DrawModelNonBlend(&modelGround,worldSpace,viewSpace,true);
-	DrawModelNonBlend(&modelHouse,worldSpace,viewSpace,false);
-	DrawBottle(false);
+	//DrawModelNonBlend(&modelGround,worldSpace,viewSpace,true);
+	//DrawModelNonBlend(&modelHouse,worldSpace,viewSpace,false);
+	//DrawBottle(false);
+	DrawMD5mesh(&md5Boy,scaleBoy * translationBoy * worldSpace,viewSpace,false);
 
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
@@ -2229,8 +2284,8 @@ void DrawScene()
 	d3dDeviceContext->DrawIndexed(36,0,0);
 
 //画模型透明部分
-	DrawModelBlend(&modelGround,worldSpace,viewSpace,true);
-	DrawModelBlend(&modelHouse,worldSpace,viewSpace,false);
+	//DrawModelBlend(&modelGround,worldSpace,viewSpace,true);
+	//DrawModelBlend(&modelHouse,worldSpace,viewSpace,false);
 	//DrawBottle(true);
 
 //显示文本
@@ -2350,7 +2405,7 @@ void DrawMD5mesh(struct MD5meshData *md5meshData,CXMMATRIX worldSpace,CXMMATRIX 
 		d3dDeviceContext->RSSetState(rasterState_cwnc);
 	d3dDeviceContext->PSSetShader(PS,0,0);
 	d3dDeviceContext->PSSetSamplers(0,1,samplerState);
-	d3dDeviceContext->OMSetBlendState(blendState,0,0xffffffff);
+	d3dDeviceContext->OMSetBlendState(0,0,0xffffffff);
 	d3dDeviceContext->VSSetShader(VS,0,0);
 	for(int i = 0,iLen = md5meshData->meshList.size();i < iLen;i++)
 	{
@@ -2689,11 +2744,11 @@ float TriangleHitDetect(XMFLOAT3 rayPointSrc,XMFLOAT3 rayPointDst,XMFLOAT3 point
 	}
 }
 
-#define BOTTLE_NUM 1000
+#define BOTTLE_NUM 20
 void DrawBottle(bool isBlend)	//bottles' controlling,condition checking and drawing
 {
-	static XMMATRIX worldSpaceTemp[BOTTLE_NUM];
-	static bool isAlive[BOTTLE_NUM];
+	static XMMATRIX worldSpaceTemp[BOTTLE_NUM + 2];
+	static bool isAlive[BOTTLE_NUM + 2];
 	static bool firstCall = true;
 	if(firstCall == true)
 	{
