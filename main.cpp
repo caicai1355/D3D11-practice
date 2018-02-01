@@ -39,12 +39,12 @@
 
 /*
 the portion that can be improved
-1.don't forget the LoadObjModel() function still can't load the polygon more than 3 sides
+1.don't forget the LoadObjModel() function still can't load the polygon more than 3 edges
 2.set the article struct that be used for store model data,collider data,world space,world position after calculated and so on,because world position would calculated repeatedly
 3.collider should be a individual struct,can't be the derived class of the modeldata struct,if some article intends to detect collider,it must have a collider struct
 */
 
-#define SCREEN_SIZE 2
+#define SCREEN_SIZE 1
 #if SCREEN_SIZE == 1
 #define WIDTH 100
 #define HEIGHT 100 
@@ -286,6 +286,7 @@ ID3D11DepthStencilView * depthStencilView;
 ID3D11RasterizerState * rasterState_cw;
 ID3D11RasterizerState * rasterState_acw;
 ID3D11RasterizerState * rasterState_cwnc;
+ID3D11RasterizerState * rasterState_cw_bias;
 ID3D11RasterizerState * rasterState_cwnc_bias;
 ID3D11Texture2D *depthStencilTexture;
 ID3D11Buffer* squareVertBuffer;
@@ -357,7 +358,7 @@ struct ModelData modelBottle;
 struct ModelColliderData colliderBottle;
 struct MD5meshData md5Boy;
 XMMATRIX scaleBoy = XMMatrixScaling( 0.01f, 0.01f, 0.01f );			// The model is a bit too large for our scene, so make it smaller
-XMMATRIX translationBoy = XMMatrixTranslation( -2.0f, 3.0f, -2.0f );
+XMMATRIX translationBoy = XMMatrixTranslation( -2.0f, 3.0f, 1.5f );
 
 //raycast(world space)
 XMVECTORF32 rayPointEye;
@@ -1271,11 +1272,12 @@ bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoo
 		{
 			std::vector<XMFLOAT3> faceNormal;
 			XMFLOAT3 normalTemp;
+			XMVECTOR edge1,edge2;
 			for(int i = 0,iLen = modelData->indexVec.size();i < iLen;i+=3)
 			{
-				normalTemp.x = (modelData->vertexVec[modelData->indexVec[i]].normal.x + modelData->vertexVec[modelData->indexVec[i+1]].normal.x + modelData->vertexVec[modelData->indexVec[i+2]].normal.x)/3;
-				normalTemp.y = (modelData->vertexVec[modelData->indexVec[i]].normal.y + modelData->vertexVec[modelData->indexVec[i+1]].normal.y + modelData->vertexVec[modelData->indexVec[i+2]].normal.y)/3;
-				normalTemp.z = (modelData->vertexVec[modelData->indexVec[i]].normal.z + modelData->vertexVec[modelData->indexVec[i+1]].normal.z + modelData->vertexVec[modelData->indexVec[i+2]].normal.z)/3;
+				edge1 = XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[i+1]].position)) - XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[i]].position));
+				edge2 = XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[i+2]].position)) - XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[i]].position));
+				XMStoreFloat3(&normalTemp,XMVector3Cross(edge1,edge2));
 				faceNormal.push_back(normalTemp);
 			}
 			int joinFaceNum;
@@ -1322,32 +1324,7 @@ bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoo
 			{
 				startArray = modelData->modelSurMetVec[i].texArrayIndex;
 				for(int j = 0;j < modelData->modelSurMetVec[i].indexCount;j+=3)
-				{
-					/*计算tangent*/
-					//textCoorU1 = modelData->vertexVec[modelData->indexVec[startArray + j + 0]].textureCoordinate.x - modelData->vertexVec[modelData->indexVec[startArray + j + 1]].textureCoordinate.x;
-					//wordPos1 = XMVectorSubtract(XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[startArray + j + 0]].position)),XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[startArray + j + 1]].position)));
-					//if(textCoorU1 == 0.0f)
-					//{
-					//	if(modelData->vertexVec[modelData->indexVec[startArray + j + 0]].textureCoordinate.y - modelData->vertexVec[modelData->indexVec[startArray + j + 1]].textureCoordinate.y > 0)
-					//		tangentTemp = XMVector3Normalize(wordPos1);
-					//	else
-					//		tangentTemp = -XMVector3Normalize(wordPos1);
-					//}
-					//else
-					//{
-					//	textCoorU2 = modelData->vertexVec[modelData->indexVec[startArray + j + 0]].textureCoordinate.x - modelData->vertexVec[modelData->indexVec[startArray + j + 2]].textureCoordinate.x;
-					//	wordPos2 = XMVectorSubtract(XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[startArray + j + 0]].position)),XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[startArray + j + 2]].position)));
-					//	if(textCoorU2 == 0.0f)
-					//	{
-					//		if(modelData->vertexVec[modelData->indexVec[startArray + j + 0]].textureCoordinate.y - modelData->vertexVec[modelData->indexVec[startArray + j + 2]].textureCoordinate.y > 0)
-					//			tangentTemp = XMVector3Normalize(wordPos2);
-					//		else
-					//			tangentTemp = -XMVector3Normalize(wordPos2);
-					//	}
-					//	else
-					//		tangentTemp = XMVector3Normalize(XMVectorAdd(XMVectorScale(wordPos1,textCoorU2),XMVectorScale(wordPos2,-textCoorU1)));
-					//}
-					
+				{	
 					textCoorU1 = modelData->vertexVec[modelData->indexVec[startArray + j + 0]].textureCoordinate.x - modelData->vertexVec[modelData->indexVec[startArray + j + 1]].textureCoordinate.x;
 					wordPos1 = XMVectorSubtract(XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[startArray + j + 0]].position)),XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[startArray + j + 1]].position)));
 					textCoorU2 = modelData->vertexVec[modelData->indexVec[startArray + j + 0]].textureCoordinate.x - modelData->vertexVec[modelData->indexVec[startArray + j + 2]].textureCoordinate.x;
@@ -1484,13 +1461,27 @@ bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isR
 					jointTemp.name = keyString;
 					md5File >> jointTemp.parentIndex;
 					md5File >> keyString;	//skip the "("
-					md5File >> jointTemp.jointPos.x >> jointTemp.jointPos.z >> jointTemp.jointPos.y;
+					if(isRHCoord)
+					{
+						md5File >> jointTemp.jointPos.x >> jointTemp.jointPos.z >> jointTemp.jointPos.y;
+					}
+					else
+					{
+						md5File >> jointTemp.jointPos.x >> jointTemp.jointPos.y >> jointTemp.jointPos.z;
+					}
 					if(isRHCoord)
 					{
 						jointTemp.jointPos.z *= -1;
 					}
 					md5File >> keyString >> keyString;	//skip the "）" and "("
-					md5File >> jointTemp.jointQuat.x >> jointTemp.jointQuat.z >> jointTemp.jointQuat.y;
+					if(isRHCoord)
+					{
+						md5File >> jointTemp.jointQuat.x >> jointTemp.jointQuat.z >> jointTemp.jointQuat.y;
+					}
+					else
+					{
+						md5File >> jointTemp.jointQuat.x >> jointTemp.jointQuat.y >> jointTemp.jointQuat.z;
+					}
 					//calculate the 'w' of quaternion
 					floatNumTemp = 1.0f - jointTemp.jointQuat.x * jointTemp.jointQuat.x - jointTemp.jointQuat.y * jointTemp.jointQuat.y - jointTemp.jointQuat.z * jointTemp.jointQuat.z;
 					if(floatNumTemp <= 0.0f)
@@ -1539,7 +1530,7 @@ bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isR
 							md5File >> keyString >> keyString;	//skip the "vert" and "0"
 							md5File >> keyString;	//skip the "("
 							md5File >> vertexTemp.textureCoordinate.x >> vertexTemp.textureCoordinate.y;
-							if(isRHCoord)
+							if(!isRHCoord)
 							{
 								vertexTemp.textureCoordinate.y = 1.0f - vertexTemp.textureCoordinate.y;
 							}
@@ -1571,7 +1562,14 @@ bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isR
 							md5File >> weightTemp.jointIndex;
 							md5File >> weightTemp.weightValue;
 							md5File >> keyString;	//skip the "("
-							md5File >> weightTemp.position.x >> weightTemp.position.z >> weightTemp.position.y;
+							if(isRHCoord)
+							{
+								md5File >> weightTemp.position.x >> weightTemp.position.z >> weightTemp.position.y;
+							}
+							else
+							{
+								md5File >> weightTemp.position.x >> weightTemp.position.y >> weightTemp.position.z;
+							}
 							md5File >> keyString;	//skip the ")"
 							meshTemp.weightData.push_back(weightTemp);
 						}
@@ -1599,11 +1597,12 @@ bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isR
 				{
 					std::vector<XMFLOAT3> faceNormal;
 					XMFLOAT3 normalTemp;
+					XMVECTOR edge1,edge2;
 					for(int i = 0,iLen = meshTemp.indexData.size();i < iLen;i+=3)
 					{
-						normalTemp.x = (meshTemp.vertexData[meshTemp.indexData[i]].normal.x + meshTemp.vertexData[meshTemp.indexData[i+1]].normal.x + meshTemp.vertexData[meshTemp.indexData[i+2]].normal.x)/3;
-						normalTemp.y = (meshTemp.vertexData[meshTemp.indexData[i]].normal.y + meshTemp.vertexData[meshTemp.indexData[i+1]].normal.y + meshTemp.vertexData[meshTemp.indexData[i+2]].normal.y)/3;
-						normalTemp.z = (meshTemp.vertexData[meshTemp.indexData[i]].normal.z + meshTemp.vertexData[meshTemp.indexData[i+1]].normal.z + meshTemp.vertexData[meshTemp.indexData[i+2]].normal.z)/3;
+						edge1 = XMLoadFloat3(&(meshTemp.vertexData[meshTemp.indexData[i+1]].position)) - XMLoadFloat3(&(meshTemp.vertexData[meshTemp.indexData[i]].position));
+						edge2 = XMLoadFloat3(&(meshTemp.vertexData[meshTemp.indexData[i+2]].position)) - XMLoadFloat3(&(meshTemp.vertexData[meshTemp.indexData[i]].position));
+						XMStoreFloat3(&normalTemp,XMVector3Cross(edge1,edge2));
 						faceNormal.push_back(normalTemp);
 					}
 					int joinFaceNum;
@@ -1838,6 +1837,8 @@ bool RenderPipeline()
 	d3dDevice->CreateRasterizerState(&rasterStateDesc,&rasterState_cwnc);
 	rasterStateDesc.DepthBias = 300;	//200还偶尔会出现。。。
 	d3dDevice->CreateRasterizerState(&rasterStateDesc,&rasterState_cwnc_bias);
+	rasterStateDesc.CullMode = D3D11_CULL_BACK;
+	d3dDevice->CreateRasterizerState(&rasterStateDesc,&rasterState_cw_bias);
 	//d3dDeviceContext->RSSetState(rasterState_cw);
 
 //常量缓存部分（空间变换和光照）
@@ -2116,7 +2117,7 @@ int CALLBACK WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine
 	WindowInit(hInstance);
 	DirectxInit();
 
-	LoadMD5Model(L"boy.md5mesh",&md5Boy,false,false);	
+	LoadMD5Model(L"boy_old.md5mesh",&md5Boy,true,true);	
 	LoadObjModel(L"spaceCompound.obj",&modelHouse,true,false);
 	LoadObjModel(L"ground.obj",&modelGround,true,false);
 	LoadObjModel(L"bottle.obj",&modelBottle,true,true);
@@ -2224,12 +2225,12 @@ void DrawScene()
 	d3dDeviceContext->ClearDepthStencilView(depthStencilView,D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
 	
 //画天空盒
-	DrawSkyBox();
+	//DrawSkyBox();
 	
 //画模型不透明部分
-	//DrawModelNonBlend(&modelGround,worldSpace,viewSpace,true);
-	//DrawModelNonBlend(&modelHouse,worldSpace,viewSpace,false);
-	//DrawBottle(false);
+	DrawModelNonBlend(&modelGround,worldSpace,viewSpace,true);
+	DrawModelNonBlend(&modelHouse,worldSpace,viewSpace,false);
+	DrawBottle(false);
 	DrawMD5mesh(&md5Boy,scaleBoy * translationBoy * worldSpace,viewSpace,false);
 
 	UINT stride = sizeof(Vertex);
@@ -2284,8 +2285,8 @@ void DrawScene()
 	d3dDeviceContext->DrawIndexed(36,0,0);
 
 //画模型透明部分
-	//DrawModelBlend(&modelGround,worldSpace,viewSpace,true);
-	//DrawModelBlend(&modelHouse,worldSpace,viewSpace,false);
+	DrawModelBlend(&modelGround,worldSpace,viewSpace,true);
+	DrawModelBlend(&modelHouse,worldSpace,viewSpace,false);
 	//DrawBottle(true);
 
 //显示文本
@@ -2761,7 +2762,7 @@ void DrawBottle(bool isBlend)	//bottles' controlling,condition checking and draw
 		worldSpaceTemp[0] = XMMatrixTranslation(-2.0f,2.0f,0.0f);
 		firstCall = false;
 	}
-	worldSpaceTemp[1] = XMMatrixTranslation(0.0f,0.0f,3.0f) * inverseViewSpace;
+	//worldSpaceTemp[1] = XMMatrixTranslation(0.0f,0.0f,3.0f) * inverseViewSpace;
 
 	if(false)
 	{	
