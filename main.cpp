@@ -44,7 +44,7 @@ the portion that can be improved
 3.collider should be a individual struct,can't be the derived class of the modeldata struct,if some article intends to detect collider,it must have a collider struct
 */
 
-#define SCREEN_SIZE 1
+#define SCREEN_SIZE 2
 #if SCREEN_SIZE == 1
 #define WIDTH 100
 #define HEIGHT 100 
@@ -311,7 +311,7 @@ ID3D10Blob* VS_Buffer;
 ID3D10Blob* PS_Buffer;
 ID3D11VertexShader* VS;
 ID3D11PixelShader* PS;
-XMVECTORF32 eyePos = {-1.0f,4.0f,-1.0f,1.0f};
+XMVECTORF32 eyePos = {-1.0f,2.0f,-1.0f,1.0f};
 XMVECTORF32 focusPos = {0.0f,1.0f,0.0f,1.0f};
 XMVECTORF32 upPos = {0.0f,1.0f,0.0f,1.0f};
 FLOAT cameraRotHorizontal = 0.0f;
@@ -1277,7 +1277,7 @@ bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoo
 			{
 				edge1 = XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[i+1]].position)) - XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[i]].position));
 				edge2 = XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[i+2]].position)) - XMLoadFloat3(&(modelData->vertexVec[modelData->indexVec[i]].position));
-				XMStoreFloat3(&normalTemp,XMVector3Cross(edge1,edge2));
+				XMStoreFloat3(&normalTemp,XMVector3Normalize(XMVector3Cross(edge1,edge2)));
 				faceNormal.push_back(normalTemp);
 			}
 			int joinFaceNum;
@@ -1602,7 +1602,7 @@ bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isR
 					{
 						edge1 = XMLoadFloat3(&(meshTemp.vertexData[meshTemp.indexData[i+1]].position)) - XMLoadFloat3(&(meshTemp.vertexData[meshTemp.indexData[i]].position));
 						edge2 = XMLoadFloat3(&(meshTemp.vertexData[meshTemp.indexData[i+2]].position)) - XMLoadFloat3(&(meshTemp.vertexData[meshTemp.indexData[i]].position));
-						XMStoreFloat3(&normalTemp,XMVector3Cross(edge1,edge2));
+						XMStoreFloat3(&normalTemp,XMVector3Normalize(XMVector3Cross(edge1,edge2)));
 						faceNormal.push_back(normalTemp);
 					}
 					int joinFaceNum;
@@ -2225,7 +2225,7 @@ void DrawScene()
 	d3dDeviceContext->ClearDepthStencilView(depthStencilView,D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
 	
 //画天空盒
-	//DrawSkyBox();
+	DrawSkyBox();
 	
 //画模型不透明部分
 	DrawModelNonBlend(&modelGround,worldSpace,viewSpace,true);
