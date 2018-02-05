@@ -205,7 +205,14 @@ struct ConstSpotLight
 #define MODEL_NULL 0
 #define MODEL_ISINIT 1
 #define MODEL_COLLIDER 2
-struct ModelData
+#define MODEL_COLLIDER_AABB 3
+
+struct Model
+{
+	int type;
+};
+
+struct ModelData:public Model
 {
 	ModelData()
 	{
@@ -218,8 +225,24 @@ struct ModelData
 	std::vector<SurfaceMaterial> modelSurMetVec;	//group信息
 	std::vector<Vertex> vertexVec;	//生成的vertex序列
 	std::vector<DWORD> indexVec;	//vertMsgVec里面的vertex信息对应的index序列（其实也是最终的用来构造index的序列）
-	int type;
+};
+
+struct ModelColliderData:public Model
+{
+	ModelColliderData()
+	{
+		type = MODEL_NULL;
+	}
+	ModelColliderData(ModelData & modelData)
+	{
+		this->vertexVec = modelData.vertexVec;
+		this->indexVec = modelData.indexVec;
+	}
+	std::vector<Vertex> vertexVec;	//vertex序列
+	std::vector<DWORD> indexVec;	//index序列
 	std::vector<DWORD> indexNoRepeat;
+	XMVECTORF32 modelCentrePoint;
+	float centreRadius;
 	void makeIndexNoRepeat()
 	{
 		for(int i = 0,iLen = indexVec.size();i < iLen;i++)
@@ -232,11 +255,25 @@ struct ModelData
 	}
 };
 
-struct ModelColliderData:public ModelData
+struct ModelColliderDataAABB:public Model
 {
-	XMVECTORF32 modelCentrePoint;
-	float centreRadius;
-	//后面还可以加group来区分leg，arm等，还能加对应的权重比
+	ModelColliderDataAABB()
+	{
+		type = MODEL_NULL;
+	}
+	ModelColliderDataAABB(XMFLOAT3 minPos,XMFLOAT3 maxPos):minPos(minPos),maxPos(maxPos)
+	{}
+	ModelColliderDataAABB(float minPosX,float minPosY,float minPosZ,float maxPosX,float maxPosY,float maxPosZ)
+	{
+		minPos.x = minPosX;
+		minPos.y = minPosY;
+		minPos.z = minPosZ;
+		maxPos.x = maxPosX;
+		maxPos.y = maxPosY;
+		maxPos.z = maxPosZ;
+	}
+	XMFLOAT3 minPos;
+	XMFLOAT3 maxPos;
 };
 
 struct MD5meshJointData
@@ -268,10 +305,16 @@ struct MD5meshMeshData
 	ID3D11ShaderResourceView * shaderResourceView;
 };
 
+struct MD5animData
+{
+
+};
+
 struct MD5meshData
 {
 	std::vector<MD5meshJointData> jointList;
 	std::vector<MD5meshMeshData> meshList;
+	MD5animData anime;
 };
 
 HWND hwnd;
@@ -522,7 +565,7 @@ void SkyBoxInit();
 
 bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoord,bool isCalcNormal);
 bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isRHCoord,bool isCalcNormal);
-void makeCollider(ModelData &sourceModelData,ModelColliderData &destColliderData);
+void makeColliderBox(ModelData &sourceModelData,ModelColliderData &destColliderData);
 void DrawModelNonBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);	//isBias was set to true when ModelData might be covered
 void DrawModelBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);	//isBias was set to true when ModelData might be covered
 void DrawMD5mesh(struct MD5meshData *md5meshData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);	//isBias was set to true when MD5meshData might be covered
@@ -534,8 +577,8 @@ void DrawBottle(bool isBlend);
 #define DETECT_METHOD_MODEL_AND_BOUNDING_SPHERE 2
 void UpdateScene(double currentFrameTime);
 void GetRayCast();
-bool MouseHitDetect(ModelData & modelData,CXMMATRIX worldSpaceTemp,int method);
-bool ColliderDetect(ModelData & srcModel,ModelData & dstModel,CXMMATRIX srcWorldSpace,CXMMATRIX dstWorldSpace,int method);
+bool MouseHitDetect(Model & modelData,CXMMATRIX worldSpaceTemp,int method);
+bool ColliderDetect(Model & srcModel,Model & dstModel,CXMMATRIX srcWorldSpace,CXMMATRIX dstWorldSpace,int method);
 float TriangleHitDetect(XMFLOAT3 rayPointSrc,XMFLOAT3 rayPointDst,XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3);
 void DrawScene();
 
@@ -1358,7 +1401,6 @@ bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoo
 				}
 			}
 		}
-		modelData->makeIndexNoRepeat();
 
 		HRESULT hr;
 		D3D11_BUFFER_DESC vertexBufferDesc;
@@ -1691,7 +1733,84 @@ bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isR
 	}
 }
 
-void makeCollider(ModelData &sourceModelData,ModelColliderData &destColliderData)
+bool LoadMD5Anime(std::wstring filename,struct MD5animData *md5animData,bool isRHCoord,bool isCalcNormal = true)
+{
+	std::wifstream md5Anim(filename);
+	if(md5Anim)
+	{
+		std::wstring keyString;
+		std::wstring commandline;
+		wchar_t keyChar;
+		int MD5Version;
+		int numJoints;
+		int numFrames;
+		int frameRate;
+		int numAnimatedComponents;
+		while(md5Anim)
+		{
+			md5Anim >> keyString;
+			if(keyString == L"MD5Version")
+			{
+				md5Anim >> MD5Version;
+			}
+			else if(keyString == L"commandline")
+			{
+				while(md5Anim.get() != '"');
+				keyString = L"";
+				while((keyChar = md5Anim.get()) != '"')
+				{
+					keyString += keyChar;
+				}
+				commandline = keyString;
+			}
+			else if(keyString == L"numFrames")
+			{
+				md5Anim >> numFrames;
+			}
+			else if(keyString == L"numJoints")
+			{
+				md5Anim >> numJoints;
+			}
+			else if(keyString == L"frameRate")
+			{
+				md5Anim >> frameRate;
+			}
+			else if(keyString == L"numAnimatedComponents")
+			{
+				md5Anim >> numAnimatedComponents;
+			}
+			else if(keyString == L"hierarchy")
+			{
+				md5Anim >> keyString;	//skip the "{"
+			}
+			else if(keyString == L"bounds")
+			{
+				for(int i = 0;i < numFrames;i++)
+				{
+					md5Anim >> keyString;	//skip the "("
+					md5Anim >> keyString >> keyString;	//skip the ")" and "("
+					md5Anim >> keyString;	//skip the ")"
+				}
+			}
+			else if(keyString == L"baseframe")
+			{
+			}
+			else if(keyString == L"frame")
+			{
+			}
+		}
+	}
+	else
+	{
+		std::wstring errorString = L"open \"";
+		errorString += filename;
+		errorString += L"\" error!";
+		MessageBox(hwnd,errorString.c_str(),L"error",MB_OK);
+		return false;
+	}
+}
+
+void makeColliderBox(ModelData &sourceModelData,ModelColliderData &destColliderData)
 {
 	float maxX = -FLT_MAX,minX = FLT_MAX,maxY = -FLT_MAX,minY = FLT_MAX,maxZ = -FLT_MAX,minZ = FLT_MAX;
 	for(int i = 0,iLen = sourceModelData.indexVec.size();i < iLen;i++)
@@ -2132,7 +2251,7 @@ int CALLBACK WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine
 	LoadObjModel(L"spaceCompound.obj",&modelHouse,true,false);
 	LoadObjModel(L"ground.obj",&modelGround,true,false);
 	LoadObjModel(L"bottle.obj",&modelBottle,true,true);
-	makeCollider(modelBottle,colliderBottle);
+	makeColliderBox(modelBottle,colliderBottle);
 	InitDirectInput(hInstance);
 	RenderPipeline();
 	messageLoop();
@@ -2546,10 +2665,10 @@ void GetRayCast()
 	rayPointDir.v = XMVector3TransformCoord(viewPoint.v,inverseViewSpace);
 }
 
-bool MouseHitDetect(ModelData & modelData,CXMMATRIX worldSpaceTemp,int method = DETECT_METHOD_MODEL)
+bool MouseHitDetect(Model & modelData,CXMMATRIX worldSpaceTemp,int method = DETECT_METHOD_MODEL)
 {
 	XMVECTORF32 point1,point2,point3;
-	if(modelData.type == MODEL_COLLIDER && (method == DETECT_METHOD_BOUNDING_SPHERE || method == DETECT_METHOD_MODEL_AND_BOUNDING_SPHERE))
+	if((modelData.type == MODEL_COLLIDER || modelData.type == MODEL_COLLIDER_AABB)&& (method == DETECT_METHOD_BOUNDING_SPHERE || method == DETECT_METHOD_MODEL_AND_BOUNDING_SPHERE))	//detect the bounding sphere
 	{
 		ModelColliderData &colliderDataTemp = ((ModelColliderData&)modelData);
 		float distance;
@@ -2565,20 +2684,39 @@ bool MouseHitDetect(ModelData & modelData,CXMMATRIX worldSpaceTemp,int method = 
 			return true;
 		}
 	}
-	for(int i = 0,iLen = modelData.indexVec.size();i < iLen;i+=3)
+	if(modelData.type == MODEL_COLLIDER_AABB)	//detect the AABB box
 	{
-		point1.v =  XMVector3TransformCoord(XMLoadFloat3(&(modelData.vertexVec[modelData.indexVec[i]].position)),worldSpaceTemp);
-		point2.v =  XMVector3TransformCoord(XMLoadFloat3(&(modelData.vertexVec[modelData.indexVec[i+1]].position)),worldSpaceTemp);
-		point3.v =  XMVector3TransformCoord(XMLoadFloat3(&(modelData.vertexVec[modelData.indexVec[i+2]].position)),worldSpaceTemp);
-		if(TriangleHitDetect(rayPointEye.f,rayPointDir.f,point1.f,point2.f,point3.f) != FLT_MAX)
+
+	}
+	else	//detect the bounding box
+	{
+		std::vector<Vertex> *vertexVec;
+		std::vector<DWORD> *indexVec;
+		if(modelData.type == MODEL_ISINIT)
 		{
-			return true;
+			vertexVec = &((ModelData&)modelData).vertexVec;
+			indexVec = &((ModelData&)modelData).indexVec;
+		}
+		else
+		{
+			vertexVec = &((ModelColliderData&)modelData).vertexVec;
+			indexVec = &((ModelColliderData&)modelData).indexVec;
+		}
+		for(int i = 0,iLen = indexVec->size();i < iLen;i+=3)
+		{
+			point1.v =  XMVector3TransformCoord(XMLoadFloat3(&((*vertexVec)[(*indexVec)[i]].position)),worldSpaceTemp);
+			point2.v =  XMVector3TransformCoord(XMLoadFloat3(&((*vertexVec)[(*indexVec)[i+1]].position)),worldSpaceTemp);
+			point3.v =  XMVector3TransformCoord(XMLoadFloat3(&((*vertexVec)[(*indexVec)[i+2]].position)),worldSpaceTemp);
+			if(TriangleHitDetect(rayPointEye.f,rayPointDir.f,point1.f,point2.f,point3.f) != FLT_MAX)
+			{
+				return true;
+			}
 		}
 	}
 	return false;
 }
 
-bool ColliderDetect(ModelData & srcModel,ModelData & dstModel,CXMMATRIX srcWorldSpace,CXMMATRIX dstWorldSpace,int method = DETECT_METHOD_MODEL)
+bool ColliderDetect(Model & srcModel,Model & dstModel,CXMMATRIX srcWorldSpace,CXMMATRIX dstWorldSpace,int method = DETECT_METHOD_MODEL)
 {
 	if(method == DETECT_METHOD_MODEL_AND_BOUNDING_SPHERE || method == DETECT_METHOD_BOUNDING_SPHERE)
 	{
@@ -2598,7 +2736,7 @@ bool ColliderDetect(ModelData & srcModel,ModelData & dstModel,CXMMATRIX srcWorld
 				return false;
 			}
 		}
-		else if(srcModel.type == MODEL_COLLIDER || dstModel.type == MODEL_COLLIDER)	//one centre check one collider
+		else if((srcModel.type == MODEL_COLLIDER && dstModel.type == MODEL_ISINIT)||(srcModel.type == MODEL_ISINIT && dstModel.type == MODEL_COLLIDER))	//one centre check one collider
 		{
 			XMVECTORF32 centrePoint;
 			float centreRadius;
@@ -2606,20 +2744,20 @@ bool ColliderDetect(ModelData & srcModel,ModelData & dstModel,CXMMATRIX srcWorld
 			XMMATRIX worldPosition;
 			if(srcModel.type == MODEL_COLLIDER)
 			{
-				colliderData = &dstModel;
+				colliderData = (ModelData*)&dstModel;
 				centrePoint = ((ModelColliderData&)srcModel).modelCentrePoint;
 				centreRadius = ((ModelColliderData&)srcModel).centreRadius;
 			}
 			else
 			{
-				colliderData = &srcModel;
+				colliderData = (ModelData*)&srcModel;
 				centrePoint = ((ModelColliderData&)dstModel).modelCentrePoint;
 				centreRadius = ((ModelColliderData&)dstModel).centreRadius;
 			}
 			bool iFlag = false;
-			for(int i = 0,iLen = colliderData->indexNoRepeat.size();i < iLen;i++)
+			for(int i = 0,iLen = colliderData->indexVec.size();i < iLen;i++)
 			{
-				if(XMVectorGetX(XMVector3Length(XMVector3TransformCoord(XMLoadFloat3(&(colliderData->vertexVec[colliderData->indexNoRepeat[i]].position)),worldPosition)-centrePoint.v)) <= centreRadius)
+				if(XMVectorGetX(XMVector3Length(XMVector3TransformCoord(XMLoadFloat3(&(colliderData->vertexVec[colliderData->indexVec[i]].position)),worldPosition)-centrePoint.v)) <= centreRadius)
 				{
 					if(method == DETECT_METHOD_BOUNDING_SPHERE)
 					{
@@ -2638,38 +2776,63 @@ bool ColliderDetect(ModelData & srcModel,ModelData & dstModel,CXMMATRIX srcWorld
 			}
 		}
 	}
-	//model checking
-	XMVECTORF32 srcPoint1,srcPoint2,srcPoint3;
-	XMVECTORF32 dstPoint1,dstPoint2,dstPoint3;
-	float t;
-	for(int i = 0,iLen = srcModel.indexVec.size();i < iLen;i+=3)
+	
+	if((srcModel.type == MODEL_COLLIDER || srcModel.type == MODEL_ISINIT)&&(dstModel.type == MODEL_ISINIT || dstModel.type == MODEL_COLLIDER))	//model checking
 	{
-		srcPoint1.v = XMVector3TransformCoord(XMLoadFloat3(&(srcModel.vertexVec[srcModel.indexVec[i]].position)),dstWorldSpace);
-		srcPoint2.v = XMVector3TransformCoord(XMLoadFloat3(&(srcModel.vertexVec[srcModel.indexVec[i+1]].position)),dstWorldSpace);
-		srcPoint3.v = XMVector3TransformCoord(XMLoadFloat3(&(srcModel.vertexVec[srcModel.indexVec[i+2]].position)),dstWorldSpace);
-		for(int j = 0,jLen = dstModel.indexVec.size();j < iLen;j+=3)
+		XMVECTORF32 srcPoint1,srcPoint2,srcPoint3;
+		XMVECTORF32 dstPoint1,dstPoint2,dstPoint3;
+		float t;
+		std::vector<Vertex> *srcVertexVec,*dstVertexVec;
+		std::vector<DWORD> *srcIndexVec,*dstIndexVec;
+		if(srcModel.type == MODEL_ISINIT)
 		{
-			dstPoint1.v = XMVector3TransformCoord(XMLoadFloat3(&(dstModel.vertexVec[dstModel.indexVec[j]].position)),srcWorldSpace);
-			dstPoint2.v = XMVector3TransformCoord(XMLoadFloat3(&(dstModel.vertexVec[dstModel.indexVec[j+1]].position)),srcWorldSpace);
-			dstPoint3.v = XMVector3TransformCoord(XMLoadFloat3(&(dstModel.vertexVec[dstModel.indexVec[j+2]].position)),srcWorldSpace);
-			t = TriangleHitDetect(srcPoint1.f,srcPoint2.f,dstPoint1.f,dstPoint2.f,dstPoint3.f);
-			if(0.0f <= t && t <= 1.0f)
+			srcVertexVec = &((ModelData&)srcModel).vertexVec;
+			srcIndexVec = &((ModelData&)srcModel).indexVec;
+		}
+		else
+		{
+			srcVertexVec = &((ModelColliderData&)srcModel).vertexVec;
+			srcIndexVec = &((ModelColliderData&)srcModel).indexVec;
+		}
+		if(dstModel.type == MODEL_ISINIT)
+		{
+			dstVertexVec = &((ModelData&)dstModel).vertexVec;
+			dstIndexVec = &((ModelData&)dstModel).indexVec;
+		}
+		else
+		{
+			dstVertexVec = &((ModelColliderData&)dstModel).vertexVec;
+			dstIndexVec = &((ModelColliderData&)dstModel).indexVec;
+		}
+		for(int i = 0,iLen = srcVertexVec->size();i < iLen;i+=3)
+		{
+			srcPoint1.v = XMVector3TransformCoord(XMLoadFloat3(&((*srcVertexVec)[(*srcIndexVec)[i]].position)),dstWorldSpace);
+			srcPoint2.v = XMVector3TransformCoord(XMLoadFloat3(&((*srcVertexVec)[(*srcIndexVec)[i+1]].position)),dstWorldSpace);
+			srcPoint3.v = XMVector3TransformCoord(XMLoadFloat3(&((*srcVertexVec)[(*srcIndexVec)[i+2]].position)),dstWorldSpace);
+			for(int j = 0,jLen = dstVertexVec->size();j < iLen;j+=3)
 			{
-				return true;
-			}
-			t = TriangleHitDetect(srcPoint2.f,srcPoint3.f,dstPoint1.f,dstPoint2.f,dstPoint3.f);
-			if(0.0f <= t && t <= 1.0f)
-			{
-				return true;
-			}
-			t = TriangleHitDetect(srcPoint3.f,srcPoint1.f,dstPoint1.f,dstPoint2.f,dstPoint3.f);
-			if(0.0f <= t && t <= 1.0f)
-			{
-				return true;
+				dstPoint1.v = XMVector3TransformCoord(XMLoadFloat3(&((*dstVertexVec)[(*dstIndexVec)[j]].position)),srcWorldSpace);
+				dstPoint2.v = XMVector3TransformCoord(XMLoadFloat3(&((*dstVertexVec)[(*dstIndexVec)[j+1]].position)),srcWorldSpace);
+				dstPoint3.v = XMVector3TransformCoord(XMLoadFloat3(&((*dstVertexVec)[(*dstIndexVec)[j+2]].position)),srcWorldSpace);
+				t = TriangleHitDetect(srcPoint1.f,srcPoint2.f,dstPoint1.f,dstPoint2.f,dstPoint3.f);
+				if(0.0f <= t && t <= 1.0f)
+				{
+					return true;
+				}
+				t = TriangleHitDetect(srcPoint2.f,srcPoint3.f,dstPoint1.f,dstPoint2.f,dstPoint3.f);
+				if(0.0f <= t && t <= 1.0f)
+				{
+					return true;
+				}
+				t = TriangleHitDetect(srcPoint3.f,srcPoint1.f,dstPoint1.f,dstPoint2.f,dstPoint3.f);
+				if(0.0f <= t && t <= 1.0f)
+				{
+					return true;
+				}
 			}
 		}
+		return false;
 	}
-	return false;
 }
 
 float TriangleHitDetect(XMFLOAT3 rayPointSrc,XMFLOAT3 rayPointDst,XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3)
