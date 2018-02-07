@@ -3014,13 +3014,48 @@ bool ColliderDetectSource(ModelColliderDataSource & srcModel,ModelColliderDataSo
 	return false;
 }
 
-bool ColliderDetectAABB(ModelColliderDataAABB & srcModel,ModelColliderDataAABB & dstModel)
+bool ColliderDetectAABB(ModelColliderDataAABB & srcModelWorldSpace,ModelColliderDataAABB & dstModelworldSpace)
 {
+	if(srcModelWorldSpace.maxPos.x > dstModelworldSpace.minPos.x && dstModelworldSpace.maxPos.x > srcModelWorldSpace.minPos.x)
+		if(srcModelWorldSpace.maxPos.y > dstModelworldSpace.minPos.y && dstModelworldSpace.maxPos.y > srcModelWorldSpace.minPos.y)
+			if(srcModelWorldSpace.maxPos.z > dstModelworldSpace.minPos.z && dstModelworldSpace.maxPos.x > srcModelWorldSpace.minPos.x)
+				return true;
 	return false;
 }
 
 bool ColliderDetectOBB(ModelColliderDataOBB & srcModel,ModelColliderDataOBB & dstModel,CXMMATRIX srcWorldSpace,CXMMATRIX dstWorldSpace)
 {
+	float srcMaxX,srcMaxY,srcMaxZ,srcMinX,srcMinY,srcMinZ;
+	float dstMaxX,dstMaxY,dstMaxZ,dstMinX,dstMinY,dstMinZ;
+	XMVECTOR srcWorldPosHHH,srcWorldPosHHL,srcWorldPosLHL,srcWorldPosLHH,srcWorldPosHLH,srcWorldPosHLL,srcWorldPosLLL,srcWorldPosLLH;
+	XMVECTOR dstWorldPosHHH,dstWorldPosHHL,dstWorldPosLHL,dstWorldPosLHH,dstWorldPosHLH,dstWorldPosHLL,dstWorldPosLLL,dstWorldPosLLH;
+	srcMaxX = srcModel.maxPos.x;
+	srcMaxY = srcModel.maxPos.y;
+	srcMaxZ = srcModel.maxPos.z;
+	srcMinX = srcModel.minPos.x;
+	srcMinY = srcModel.minPos.y;
+	srcMinZ = srcModel.minPos.z;
+	dstMaxX = dstModel.maxPos.x;
+	dstMaxY = dstModel.maxPos.y;
+	dstMaxZ = dstModel.maxPos.z;
+	dstMinX = dstModel.minPos.x;
+	dstMinY = dstModel.minPos.y;
+	dstMinZ = dstModel.minPos.z;
+	srcWorldPosHHH = XMVector3TransformCoord(XMVectorSet(srcMaxX,srcMaxY,srcMaxZ)),srcWorldSpace);
+	srcWorldPosHHL = XMVector3TransformCoord(XMVectorSet(srcMaxX,srcMaxY,srcMinZ)),srcWorldSpace);
+	srcWorldPosHHL = XMVector3TransformCoord(XMVectorSet(srcMaxX,srcMaxY,srcMinZ)),srcWorldSpace);
+	srcWorldPosHHL = XMVector3TransformCoord(XMVectorSet(srcMaxX,srcMaxY,srcMinZ)),srcWorldSpace);
+	srcWorldPosHHL = XMVector3TransformCoord(XMVectorSet(srcMaxX,srcMaxY,srcMinZ)),srcWorldSpace);
+	srcWorldPosHHL = XMVector3TransformCoord(XMVectorSet(srcMaxX,srcMaxY,srcMinZ)),srcWorldSpace);
+	srcWorldPosHHL = XMVector3TransformCoord(XMVectorSet(srcMaxX,srcMaxY,srcMinZ)),srcWorldSpace);
+	srcWorldPosHHL = XMVector3TransformCoord(XMVectorSet(srcMaxX,srcMaxY,srcMinZ)),srcWorldSpace);
+	srcWorldPosHHL = XMVector3TransformCoord(XMVectorSet(srcMaxX,srcMaxY,srcMinZ)),srcWorldSpace);
+	srcWorldPosHHL = XMVector3TransformCoord(XMVectorSet(srcMaxX,srcMaxY,srcMinZ)),srcWorldSpace);
+
+	srcMaxWorldPos = XMVector3TransformCoord(XMLoadFloat3(&(srcModel.maxPos)),srcWorldSpace);
+	srcMinWorldPos = XMVector3TransformCoord(XMLoadFloat3(&(srcModel.minPos)),srcWorldSpace);
+	dstMaxWorldPos = XMVector3TransformCoord(XMLoadFloat3(&(dstModel.maxPos)),dstWorldSpace);
+	dstMinWorldPos = XMVector3TransformCoord(XMLoadFloat3(&(dstModel.minPos)),dstWorldSpace);
 	return false;
 }
 
