@@ -718,6 +718,9 @@ void UpdateScene(double currentFrameTime);
 void GetRayCast();
 bool MouseHitDetect(Model & modelData,CXMMATRIX worldSpaceTemp,int method);
 //bool ColliderDetect(Model & srcModel,Model & dstModel,CXMMATRIX srcWorldSpace,CXMMATRIX dstWorldSpace,int method);
+bool ColliderDetectSource(ModelColliderDataSource & srcModel,ModelColliderDataSource & dstModel,CXMMATRIX srcWorldSpace,CXMMATRIX dstWorldSpace,int method);
+bool ColliderDetectAABB(ModelColliderDataAABB & srcModelWorldSpace,ModelColliderDataAABB & dstModelworldSpace);
+bool ColliderDetectOBB(ModelColliderDataOBB & srcModel,ModelColliderDataOBB & dstModel,CXMMATRIX srcWorldSpace,CXMMATRIX dstWorldSpace);
 float TriangleHitDetect(XMFLOAT3 rayPointSrc,XMFLOAT3 rayPointDst,XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3);
 void DrawScene();
 
@@ -3025,38 +3028,89 @@ bool ColliderDetectAABB(ModelColliderDataAABB & srcModelWorldSpace,ModelCollider
 
 bool ColliderDetectOBB(ModelColliderDataOBB & srcModel,ModelColliderDataOBB & dstModel,CXMMATRIX srcWorldSpace,CXMMATRIX dstWorldSpace)
 {
-	float srcMaxX,srcMaxY,srcMaxZ,srcMinX,srcMinY,srcMinZ;
-	float dstMaxX,dstMaxY,dstMaxZ,dstMinX,dstMinY,dstMinZ;
-	XMVECTOR srcWorldPosHHH,srcWorldPosHHL,srcWorldPosLHL,srcWorldPosLHH,srcWorldPosHLH,srcWorldPosHLL,srcWorldPosLLL,srcWorldPosLLH;
-	XMVECTOR dstWorldPosHHH,dstWorldPosHHL,dstWorldPosLHL,dstWorldPosLHH,dstWorldPosHLH,dstWorldPosHLL,dstWorldPosLLL,dstWorldPosLLH;
-	srcMaxX = srcModel.maxPos.x;
-	srcMaxY = srcModel.maxPos.y;
-	srcMaxZ = srcModel.maxPos.z;
-	srcMinX = srcModel.minPos.x;
-	srcMinY = srcModel.minPos.y;
-	srcMinZ = srcModel.minPos.z;
-	dstMaxX = dstModel.maxPos.x;
-	dstMaxY = dstModel.maxPos.y;
-	dstMaxZ = dstModel.maxPos.z;
-	dstMinX = dstModel.minPos.x;
-	dstMinY = dstModel.minPos.y;
-	dstMinZ = dstModel.minPos.z;
-	srcWorldPosHHH = XMVector3TransformCoord(XMVectorSet(srcMaxX,srcMaxY,srcMaxZ)),srcWorldSpace);
-	srcWorldPosHHL = XMVector3TransformCoord(XMVectorSet(srcMaxX,srcMaxY,srcMinZ)),srcWorldSpace);
-	srcWorldPosHHL = XMVector3TransformCoord(XMVectorSet(srcMaxX,srcMaxY,srcMinZ)),srcWorldSpace);
-	srcWorldPosHHL = XMVector3TransformCoord(XMVectorSet(srcMaxX,srcMaxY,srcMinZ)),srcWorldSpace);
-	srcWorldPosHHL = XMVector3TransformCoord(XMVectorSet(srcMaxX,srcMaxY,srcMinZ)),srcWorldSpace);
-	srcWorldPosHHL = XMVector3TransformCoord(XMVectorSet(srcMaxX,srcMaxY,srcMinZ)),srcWorldSpace);
-	srcWorldPosHHL = XMVector3TransformCoord(XMVectorSet(srcMaxX,srcMaxY,srcMinZ)),srcWorldSpace);
-	srcWorldPosHHL = XMVector3TransformCoord(XMVectorSet(srcMaxX,srcMaxY,srcMinZ)),srcWorldSpace);
-	srcWorldPosHHL = XMVector3TransformCoord(XMVectorSet(srcMaxX,srcMaxY,srcMinZ)),srcWorldSpace);
-	srcWorldPosHHL = XMVector3TransformCoord(XMVectorSet(srcMaxX,srcMaxY,srcMinZ)),srcWorldSpace);
+	float srcPoint[6],dstPoint[6];
+	XMVECTOR srcWorldPos[8],dstWorldPos[8];
+	XMVECTOR srcNormal[3],dstNormal[3]; 
+	srcPoint[0] = srcModel.maxPos.x;
+	srcPoint[1] = srcModel.maxPos.y;
+	srcPoint[2] = srcModel.maxPos.z;
+	srcPoint[3] = srcModel.minPos.x;
+	srcPoint[4] = srcModel.minPos.y;
+	srcPoint[5] = srcModel.minPos.z;
+	dstPoint[0] = dstModel.maxPos.x;
+	dstPoint[1] = dstModel.maxPos.y;
+	dstPoint[2] = dstModel.maxPos.z;
+	dstPoint[3] = dstModel.minPos.x;
+	dstPoint[4] = dstModel.minPos.y;
+	dstPoint[5] = dstModel.minPos.z;
+	srcWorldPos[0] = XMVector3TransformCoord(XMVectorSet(srcPoint[0],srcPoint[1],srcPoint[2],1.0f),srcWorldSpace);
+	srcWorldPos[1] = XMVector3TransformCoord(XMVectorSet(srcPoint[0],srcPoint[1],srcPoint[5],1.0f),srcWorldSpace);
+	srcWorldPos[2] = XMVector3TransformCoord(XMVectorSet(srcPoint[3],srcPoint[1],srcPoint[5],1.0f),srcWorldSpace);
+	srcWorldPos[3] = XMVector3TransformCoord(XMVectorSet(srcPoint[3],srcPoint[1],srcPoint[2],1.0f),srcWorldSpace);
+	srcWorldPos[4] = XMVector3TransformCoord(XMVectorSet(srcPoint[0],srcPoint[4],srcPoint[2],1.0f),srcWorldSpace);
+	srcWorldPos[5] = XMVector3TransformCoord(XMVectorSet(srcPoint[0],srcPoint[4],srcPoint[5],1.0f),srcWorldSpace);
+	srcWorldPos[6] = XMVector3TransformCoord(XMVectorSet(srcPoint[3],srcPoint[4],srcPoint[5],1.0f),srcWorldSpace);
+	srcWorldPos[7] = XMVector3TransformCoord(XMVectorSet(srcPoint[3],srcPoint[4],srcPoint[2],1.0f),srcWorldSpace);
+	dstWorldPos[0] = XMVector3TransformCoord(XMVectorSet(dstPoint[0],dstPoint[1],dstPoint[2],1.0f),dstWorldSpace);
+	dstWorldPos[1] = XMVector3TransformCoord(XMVectorSet(dstPoint[0],dstPoint[1],dstPoint[5],1.0f),dstWorldSpace);
+	dstWorldPos[2] = XMVector3TransformCoord(XMVectorSet(dstPoint[3],dstPoint[1],dstPoint[5],1.0f),dstWorldSpace);
+	dstWorldPos[3] = XMVector3TransformCoord(XMVectorSet(dstPoint[3],dstPoint[1],dstPoint[2],1.0f),dstWorldSpace);
+	dstWorldPos[4] = XMVector3TransformCoord(XMVectorSet(dstPoint[0],dstPoint[4],dstPoint[2],1.0f),dstWorldSpace);
+	dstWorldPos[5] = XMVector3TransformCoord(XMVectorSet(dstPoint[0],dstPoint[4],dstPoint[5],1.0f),dstWorldSpace);
+	dstWorldPos[6] = XMVector3TransformCoord(XMVectorSet(dstPoint[3],dstPoint[4],dstPoint[5],1.0f),dstWorldSpace);
+	dstWorldPos[7] = XMVector3TransformCoord(XMVectorSet(dstPoint[3],dstPoint[4],dstPoint[2],1.0f),dstWorldSpace);
 
-	srcMaxWorldPos = XMVector3TransformCoord(XMLoadFloat3(&(srcModel.maxPos)),srcWorldSpace);
-	srcMinWorldPos = XMVector3TransformCoord(XMLoadFloat3(&(srcModel.minPos)),srcWorldSpace);
-	dstMaxWorldPos = XMVector3TransformCoord(XMLoadFloat3(&(dstModel.maxPos)),dstWorldSpace);
-	dstMinWorldPos = XMVector3TransformCoord(XMLoadFloat3(&(dstModel.minPos)),dstWorldSpace);
-	return false;
+	srcNormal[0] = srcWorldPos[0] - srcWorldPos[3];
+	srcNormal[1] = srcWorldPos[0] - srcWorldPos[4];
+	srcNormal[2] = srcWorldPos[0] - srcWorldPos[1];
+	dstNormal[0] = dstWorldPos[0] - dstWorldPos[3];
+	dstNormal[1] = dstWorldPos[0] - dstWorldPos[4];
+	dstNormal[2] = dstWorldPos[0] - dstWorldPos[1];
+
+	//query:It's possibility that the normal is zero vector
+
+	float maxRef,minRef,maxComp,minComp,floatTemp;
+	int listTemp[3] = {3,4,1};
+	
+	for(int i = 0;i < 3;i++)
+	{
+		maxRef = XMVectorGetX(XMVector3Dot(srcWorldPos[0],srcNormal[i]));
+		minRef = XMVectorGetX(XMVector3Dot(srcWorldPos[listTemp[i]],srcNormal[i]));
+		if(maxRef < minRef)
+		{
+			floatTemp = maxRef;
+			maxRef = minRef;
+			minRef = floatTemp;
+		}
+		maxComp = minComp = XMVectorGetX(XMVector3Dot(dstWorldPos[0],srcNormal[i]));
+		for(int j = 1; j < 8;j++)
+		{
+			floatTemp = XMVectorGetX(XMVector3Dot(dstWorldPos[j],srcNormal[i]));
+			if(floatTemp > maxComp)maxComp = floatTemp;
+			else if(floatTemp < minComp)minComp = floatTemp;
+		}
+		if(maxRef <= minComp || maxComp <= minRef)return false;
+	}
+	for(int i = 0;i < 3;i++)
+	{
+		maxRef = XMVectorGetX(XMVector3Dot(dstWorldPos[0],dstNormal[i]));
+		minRef = XMVectorGetX(XMVector3Dot(dstWorldPos[listTemp[i]],dstNormal[i]));
+		if(maxRef < minRef)
+		{
+			floatTemp = maxRef;
+			maxRef = minRef;
+			minRef = floatTemp;
+		}
+		maxComp = minComp = XMVectorGetX(XMVector3Dot(srcWorldPos[0],dstNormal[i]));
+		for(int j = 1; j < 8;j++)
+		{
+			floatTemp = XMVectorGetX(XMVector3Dot(srcWorldPos[j],dstNormal[i]));
+			if(floatTemp > maxComp)maxComp = floatTemp;
+			else if(floatTemp < minComp)minComp = floatTemp;
+		}
+		if(maxRef <= minComp || maxComp <= minRef)return false;
+	}
+	return true;
 }
 
 float TriangleHitDetect(XMFLOAT3 rayPointSrc,XMFLOAT3 rayPointDst,XMFLOAT3 point1,XMFLOAT3 point2,XMFLOAT3 point3)
@@ -3160,7 +3214,7 @@ void DrawBottle(bool isBlend)	//bottles' controlling,condition checking and draw
 		worldSpaceTemp[0] = XMMatrixTranslation(-2.0f,2.0f,0.0f);
 		firstCall = false;
 	}
-	//worldSpaceTemp[1] = XMMatrixTranslation(0.0f,0.0f,3.0f) * inverseViewSpace;
+	worldSpaceTemp[1] = XMMatrixTranslation(0.0f,0.0f,3.0f) * inverseViewSpace;
 
 	if(false)
 	{	
@@ -3184,7 +3238,7 @@ void DrawBottle(bool isBlend)	//bottles' controlling,condition checking and draw
 			{
 				if(ColliderDetectOBB(colliderBottle,colliderBottle,worldSpaceTemp[1],worldSpaceTemp[i]))
 				{
-					//isAlive[1] = false;
+					isAlive[1] = false;
 				}
 			}
 		}
