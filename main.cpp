@@ -312,26 +312,48 @@ struct ModelColliderDataAABB:public Model
 		maxPos.z = maxPosZ;
 		type = MODEL_COLLIDER_AABB;
 	}
+	ModelColliderDataAABB(ModelData &sourceModelData)
+	{
+		makeColliderAABB(sourceModelData);
+	}
 	void UpdateWorldCollider(ModelData &sourceModelData,CXMMATRIX worldSpace)
 	{
+		ModelColliderDataAABB resultModel;
 		XMVECTOR positionTemp;
 		float maxX = -FLT_MAX,minX = FLT_MAX,maxY = -FLT_MAX,minY = FLT_MAX,maxZ = -FLT_MAX,minZ = FLT_MAX;
 		for(int i = 0,iLen = sourceModelData.indexVec.size();i < iLen;i++)
 		{
-			positionTemp = XMVector3TransformCoord(XMLoadFloat3((&sourceModelData.vertexVec[sourceModelData.indexVec[i]].position)),worldSpace);
+			positionTemp = XMVector3TransformCoord(XMLoadFloat3(&(sourceModelData.vertexVec[sourceModelData.indexVec[i]].position)),worldSpace);
 			maxX = max(XMVectorGetX(positionTemp),maxX);
 			maxY = max(XMVectorGetY(positionTemp),maxY);
 			maxZ = max(XMVectorGetZ(positionTemp),maxZ);
 			
-			minX = max(XMVectorGetX(positionTemp),minX);
-			minY = max(XMVectorGetY(positionTemp),minY);
-			minZ = max(XMVectorGetZ(positionTemp),minZ);
+			minX = min(XMVectorGetX(positionTemp),minX);
+			minY = min(XMVectorGetY(positionTemp),minY);
+			minZ = min(XMVectorGetZ(positionTemp),minZ);
 		}
 		maxPos = XMFLOAT3(maxX,maxY,maxZ);
 		minPos = XMFLOAT3(minX,minY,minZ);
 	}
-	XMFLOAT3 minPos;	//world position
-	XMFLOAT3 maxPos;	//world position
+	void makeColliderAABB(ModelData &sourceModelData)
+	{
+		float maxX = -FLT_MAX,minX = FLT_MAX,maxY = -FLT_MAX,minY = FLT_MAX,maxZ = -FLT_MAX,minZ = FLT_MAX;
+		for(int i = 0,iLen = sourceModelData.indexVec.size();i < iLen;i++)
+		{
+			maxX = max(sourceModelData.vertexVec[sourceModelData.indexVec[i]].position.x,maxX);
+			maxY = max(sourceModelData.vertexVec[sourceModelData.indexVec[i]].position.y,maxY);
+			maxZ = max(sourceModelData.vertexVec[sourceModelData.indexVec[i]].position.z,maxZ);
+		
+			minX = min(sourceModelData.vertexVec[sourceModelData.indexVec[i]].position.x,minX);
+			minY = min(sourceModelData.vertexVec[sourceModelData.indexVec[i]].position.y,minY);
+			minZ = min(sourceModelData.vertexVec[sourceModelData.indexVec[i]].position.z,minZ);
+		}
+		maxPos = XMFLOAT3(maxX,maxY,maxZ);
+		minPos = XMFLOAT3(minX,minY,minZ);
+		type = MODEL_COLLIDER_AABB;
+	}
+	XMFLOAT3 minPos;
+	XMFLOAT3 maxPos;
 };
 
 struct ModelColliderDataOBB:public Model
@@ -400,9 +422,9 @@ struct ModelColliderDataOBB:public Model
 //			maxY = max(XMVectorGetY(positionTemp),maxY);
 //			maxZ = max(XMVectorGetZ(positionTemp),maxZ);
 //			
-//			minX = max(XMVectorGetX(positionTemp),minX);
-//			minY = max(XMVectorGetY(positionTemp),minY);
-//			minZ = max(XMVectorGetZ(positionTemp),minZ);
+//			minX = min(XMVectorGetX(positionTemp),minX);
+//			minY = min(XMVectorGetY(positionTemp),minY);
+//			minZ = min(XMVectorGetZ(positionTemp),minZ);
 //		}
 //		maxWorldPos = XMFLOAT3(maxX,maxY,maxZ);
 //		minWorldPos = XMFLOAT3(minX,minY,minZ);
@@ -445,9 +467,25 @@ struct MD5meshMeshData
 	ID3D11ShaderResourceView * shaderResourceView;
 };
 
+struct MD5animJointData
+{
+	std::wstring name;
+	int parentIndex;
+	int flag;
+	int startIndex;
+	XMFLOAT3 jointPos;
+	XMFLOAT4 jointQuat;
+};
+
 struct MD5animData
 {
-
+	int numFrames;
+	int numJoints;
+	int frameRate;
+	int numAnimatedComponents;
+	std::vector<MD5animJointData> baseFrame;
+	std::vector<ModelColliderDataAABB> boundList;
+	std::vector<std::vector<float>> frameList;
 };
 
 struct MD5meshData
@@ -1882,12 +1920,15 @@ bool LoadMD5Anime(std::wstring filename,struct MD5animData *md5animData,bool isR
 	{
 		std::wstring keyString;
 		std::wstring commandline;
+		MD5animJointData jointTemp;
+		XMFLOAT3 float3Temp_1,float3Temp_2;
+		XMFLOAT4 float4Temp;
+		std::vector<float> frameTemp;
+		float floatTemp;
+		int intTemp;
+		ModelColliderDataAABB boundTemp;
 		wchar_t keyChar;
 		int MD5Version;
-		int numJoints;
-		int numFrames;
-		int frameRate;
-		int numAnimatedComponents;
 		while(md5Anim)
 		{
 			md5Anim >> keyString;
@@ -1907,38 +1948,90 @@ bool LoadMD5Anime(std::wstring filename,struct MD5animData *md5animData,bool isR
 			}
 			else if(keyString == L"numFrames")
 			{
-				md5Anim >> numFrames;
+				md5Anim >> md5animData->numFrames;
 			}
 			else if(keyString == L"numJoints")
 			{
-				md5Anim >> numJoints;
+				md5Anim >> md5animData->numJoints;
 			}
 			else if(keyString == L"frameRate")
 			{
-				md5Anim >> frameRate;
+				md5Anim >> md5animData->frameRate;
 			}
 			else if(keyString == L"numAnimatedComponents")
 			{
-				md5Anim >> numAnimatedComponents;
+				md5Anim >> md5animData->numAnimatedComponents;
 			}
 			else if(keyString == L"hierarchy")
 			{
 				md5Anim >> keyString;	//skip the "{"
+				for(int i = 0,iLen = md5animData->numJoints;i < iLen;i++)
+				{
+					while(md5Anim.get() != '"');
+					keyString = L"";
+					while((keyChar = md5Anim.get()) != '"')
+					{
+						keyString += keyChar;
+					}
+					jointTemp.name = keyString;
+					md5Anim >> jointTemp.parentIndex;
+					md5Anim >> jointTemp.flag;
+					md5Anim >> jointTemp.startIndex;
+					md5animData->baseFrame.push_back(jointTemp);
+					std::getline(md5Anim,keyString);
+				}
+				while(md5Anim.get() != '}');	//skip the "}"
 			}
 			else if(keyString == L"bounds")
 			{
-				for(int i = 0;i < numFrames;i++)
+				for(int i = 0;i < md5animData->numFrames;i++)
 				{
 					md5Anim >> keyString;	//skip the "("
+					md5Anim >> float3Temp_1.x >> float3Temp_1.z >> float3Temp_1.y;
 					md5Anim >> keyString >> keyString;	//skip the ")" and "("
+					md5Anim >> float3Temp_2.x >> float3Temp_2.z >> float3Temp_2.y;
 					md5Anim >> keyString;	//skip the ")"
+					boundTemp.minPos = float3Temp_1;
+					boundTemp.maxPos = float3Temp_2;
+					md5animData->boundList.push_back(boundTemp);
 				}
 			}
 			else if(keyString == L"baseframe")
 			{
+				md5Anim >> keyString;	//skip the "{"
+				for(int i = 0;i < md5animData->numJoints;i++)
+				{
+					md5Anim >> keyString;	//skip the "("
+					md5Anim >> float3Temp_1.x >> float3Temp_1.z >> float3Temp_1.y;
+					md5Anim >> keyString >> keyString;	//skip the ")" and "("
+					md5Anim >> float4Temp.x >> float4Temp.z >> float4Temp.y;
+					md5Anim >> keyString;	//skip the ")"
+					md5animData->baseFrame[i].jointPos = float3Temp_1;
+					float4Temp.w = 1.0f - float4Temp.x * float4Temp.x - float4Temp.y * float4Temp.y - float4Temp.z * float4Temp.z;
+					if(float4Temp.w <= 0.0f)
+					{
+						float4Temp.w = 0.0f;
+					}
+					else
+					{
+						float4Temp.w = -sqrtf(float4Temp.w);
+					}
+					md5animData->baseFrame[i].jointQuat = float4Temp;
+				}
+				while(md5Anim.get() != '}');	//skip the "}"
 			}
 			else if(keyString == L"frame")
 			{
+				frameTemp.clear();
+				md5Anim >> intTemp;		//skip the frame number
+				md5Anim >> keyString;	//skip the "{"
+				for(int i = 0;i < md5animData->numAnimatedComponents;i++)
+				{
+					md5Anim >> floatTemp;
+					frameTemp.push_back(floatTemp);
+				}
+				while(md5Anim.get() != '}');	//skip the "}"
+				md5animData->frameList.push_back(frameTemp);
 			}
 		}
 	}
@@ -1950,24 +2043,6 @@ bool LoadMD5Anime(std::wstring filename,struct MD5animData *md5animData,bool isR
 		MessageBox(hwnd,errorString.c_str(),L"error",MB_OK);
 		return false;
 	}
-}
-
-void makeColliderAABB(ModelData &sourceModelData,ModelColliderDataAABB &destColliderData)
-{
-	float maxX = -FLT_MAX,minX = FLT_MAX,maxY = -FLT_MAX,minY = FLT_MAX,maxZ = -FLT_MAX,minZ = FLT_MAX;
-	for(int i = 0,iLen = sourceModelData.indexVec.size();i < iLen;i++)
-	{
-		maxX = max(sourceModelData.vertexVec[sourceModelData.indexVec[i]].position.x,maxX);
-		maxY = max(sourceModelData.vertexVec[sourceModelData.indexVec[i]].position.y,maxY);
-		maxZ = max(sourceModelData.vertexVec[sourceModelData.indexVec[i]].position.z,maxZ);
-		
-		minX = min(sourceModelData.vertexVec[sourceModelData.indexVec[i]].position.x,minX);
-		minY = min(sourceModelData.vertexVec[sourceModelData.indexVec[i]].position.y,minY);
-		minZ = min(sourceModelData.vertexVec[sourceModelData.indexVec[i]].position.z,minZ);
-	}
-	destColliderData.maxPos = XMFLOAT3(maxX,maxY,maxZ);
-	destColliderData.minPos = XMFLOAT3(minX,minY,minZ);
-	destColliderData.type = MODEL_COLLIDER_AABB;
 }
 
 bool RenderPipeline()
@@ -3214,7 +3289,7 @@ void DrawBottle(bool isBlend)	//bottles' controlling,condition checking and draw
 		worldSpaceTemp[0] = XMMatrixTranslation(-2.0f,2.0f,0.0f);
 		firstCall = false;
 	}
-	worldSpaceTemp[1] = XMMatrixTranslation(0.0f,0.0f,3.0f) * inverseViewSpace;
+	//worldSpaceTemp[1] = XMMatrixTranslation(0.0f,0.0f,3.0f) * inverseViewSpace;
 
 	if(false)
 	{	
@@ -3238,7 +3313,7 @@ void DrawBottle(bool isBlend)	//bottles' controlling,condition checking and draw
 			{
 				if(ColliderDetectOBB(colliderBottle,colliderBottle,worldSpaceTemp[1],worldSpaceTemp[i]))
 				{
-					isAlive[1] = false;
+					//isAlive[1] = false;
 				}
 			}
 		}
