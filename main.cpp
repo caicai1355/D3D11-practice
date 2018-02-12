@@ -743,6 +743,7 @@ void SkyBoxInit();
 
 bool LoadObjModel(std::wstring filename,struct ModelData *modelData,bool isRHCoord,bool isCalcNormal);
 bool LoadMD5Model(std::wstring filename,struct MD5meshData *md5meshData,bool isRHCoord,bool isCalcNormal);
+bool LoadMD5Anime(std::wstring filename,struct MD5animData *md5animData,bool isRHCoord,bool isCalcNormal);
 void DrawModelNonBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);	//isBias was set to true when ModelData might be covered
 void DrawModelBlend(struct ModelData *modelData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);	//isBias was set to true when ModelData might be covered
 void DrawMD5mesh(struct MD5meshData *md5meshData,CXMMATRIX worldSpace,CXMMATRIX viewSpace,bool isBias);	//isBias was set to true when MD5meshData might be covered
@@ -1984,6 +1985,7 @@ bool LoadMD5Anime(std::wstring filename,struct MD5animData *md5animData,bool isR
 			}
 			else if(keyString == L"bounds")
 			{
+				md5Anim >> keyString;	//skip the "{"
 				for(int i = 0;i < md5animData->numFrames;i++)
 				{
 					md5Anim >> keyString;	//skip the "("
@@ -1995,6 +1997,7 @@ bool LoadMD5Anime(std::wstring filename,struct MD5animData *md5animData,bool isR
 					boundTemp.maxPos = float3Temp_2;
 					md5animData->boundList.push_back(boundTemp);
 				}
+				while(md5Anim.get() != '}');	//skip the "}"
 			}
 			else if(keyString == L"baseframe")
 			{
@@ -2034,6 +2037,7 @@ bool LoadMD5Anime(std::wstring filename,struct MD5animData *md5animData,bool isR
 				md5animData->frameList.push_back(frameTemp);
 			}
 		}
+		return true;
 	}
 	else
 	{
@@ -2422,7 +2426,8 @@ int CALLBACK WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine
 	WindowInit(hInstance);
 	DirectxInit();
 
-	LoadMD5Model(L"boy_old.md5mesh",&md5Boy,true,true);	
+	LoadMD5Model(L"boy_old.md5mesh",&md5Boy,true,true);
+	LoadMD5Anime(L"boy.md5anim",&(md5Boy.anime),true,true);	
 	LoadObjModel(L"spaceCompound.obj",&modelHouse,true,false);
 	LoadObjModel(L"ground.obj",&modelGround,true,false);
 	LoadObjModel(L"bottle.obj",&modelBottle,true,true);
